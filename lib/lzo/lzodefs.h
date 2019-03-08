@@ -22,6 +22,7 @@
 #define COPY4(dst, src)	\
 		put_unaligned(get_unaligned((const u32 *)(src)), (u32 *)(dst))
 #if defined(CONFIG_X86_64) || defined(CONFIG_ARM64)
+#if defined(CONFIG_X86_64)
 #define COPY8(dst, src)	\
 		put_unaligned(get_unaligned((const u64 *)(src)), (u64 *)(dst))
 #else
@@ -35,6 +36,9 @@
 #define LZO_USE_CTZ64	1
 #define LZO_USE_CTZ32	1
 #define LZO_FAST_64BIT_MEMORY_ACCESS
+#elif defined(CONFIG_X86_64)
+#define LZO_USE_CTZ64	1
+#define LZO_USE_CTZ32	1
 #elif defined(CONFIG_X86) || defined(CONFIG_PPC)
 #define LZO_USE_CTZ32	1
 #elif defined(CONFIG_ARM) && (__LINUX_ARM_ARCH__ >= 5)
