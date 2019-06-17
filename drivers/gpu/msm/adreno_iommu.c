@@ -442,12 +442,8 @@ int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
 	struct adreno_device *adreno_dev = ADRENO_RB_DEVICE(rb);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct kgsl_pagetable *cur_pt = device->mmu.defaultpagetable;
-	unsigned int *cmds = NULL, count = 0;
-	int result = 0;
-
-	cmds = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (cmds == NULL)
-		return -ENOMEM;
+	unsigned int cmds[128];
+	unsigned int count = 0;
 
 	/* Switch the page table if a MMU is attached */
 	if (kgsl_mmu_get_mmutype(device) != KGSL_MMU_TYPE_NONE) {
@@ -464,13 +460,10 @@ int adreno_iommu_set_pt_ctx(struct adreno_ringbuffer *rb,
 	/* Add commands to set the current context in memstore */
 	count += __add_curr_ctxt_cmds(rb, cmds + count, drawctxt);
 
-	WARN(count > (PAGE_SIZE / sizeof(unsigned int)),
-			"Temp command buffer overflow\n");
+	if (WARN(count > ARRAY_SIZE(cmds),
+			"Temp command buffer overflow\n"))
+		return -ENOSPC;
 
-	result = adreno_ringbuffer_issue_internal_cmds(rb, KGSL_CMD_FLAGS_PMODE,
+	return adreno_ringbuffer_issue_internal_cmds(rb, KGSL_CMD_FLAGS_PMODE,
 			cmds, count);
-
-	kfree(cmds);
-	return result;
-
 }
