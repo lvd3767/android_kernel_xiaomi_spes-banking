@@ -4048,7 +4048,9 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	if (cstate->num_ds_enabled)
 		sde_crtc->ds_reconfig = true;
 
+	mutex_unlock(&sde_crtc->crtc_lock);
 	_sde_crtc_flush_event_thread(crtc);
+	mutex_lock(&sde_crtc->crtc_lock);
 
 	SDE_EVT32(DRMID(crtc), sde_crtc->enabled,
 			crtc->state->active, crtc->state->enable);
