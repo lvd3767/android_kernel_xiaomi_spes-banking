@@ -1859,7 +1859,6 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		if (ret)
 			goto out_free;
 		ret = walk_page_range(mm, start_vaddr, end, &pagemap_ops, &pm);
-		mmap_read_unlock(mm);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		vma = find_vma(mm, start_vaddr);
 		if (vma && vma->vm_file) {
@@ -1870,6 +1869,7 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 			}
 		}
 #endif
+                mmap_read_unlock(mm);
 		start_vaddr = end;
 
 		len = min(count, PM_ENTRY_BYTES * pm.pos);
