@@ -495,7 +495,7 @@ int bpf_iter_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
 		return -EINVAL;
 
 	if (ulinfo) {
-		err = bpf_check_uarg_tail_zero(ulinfo, sizeof(linfo),
+		err = bpf_check_uarg_tail_zero(USER_BPFPTR(ulinfo), sizeof(linfo),
 					       linfo_len);
 		if (err)
 			return err;

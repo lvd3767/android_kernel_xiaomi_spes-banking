@@ -4182,7 +4182,7 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 	return 0;
 }
 
-static struct btf *btf_parse(void __user *btf_data, u32 btf_data_size,
+static struct btf *btf_parse(bpfptr_t btf_data, u32 btf_data_size,
 			     u32 log_level, char __user *log_ubuf, u32 log_size)
 {
 	struct btf_verifier_env *env = NULL;
@@ -4230,7 +4230,7 @@ static struct btf *btf_parse(void __user *btf_data, u32 btf_data_size,
 	btf->data = data;
 	btf->data_size = btf_data_size;
 
-	if (copy_from_user(data, btf_data, btf_data_size)) {
+	if (copy_from_bpfptr(data, btf_data, btf_data_size)) {
 		err = -EFAULT;
 		goto errout;
 	}
@@ -5654,12 +5654,12 @@ static int __btf_new_fd(struct btf *btf)
 	return anon_inode_getfd("btf", &btf_fops, btf, O_RDONLY | O_CLOEXEC);
 }
 
-int btf_new_fd(const union bpf_attr *attr)
+int btf_new_fd(const union bpf_attr *attr, bpfptr_t uattr)
 {
 	struct btf *btf;
 	int ret;
 
-	btf = btf_parse(u64_to_user_ptr(attr->btf),
+	btf = btf_parse(make_bpfptr(attr->btf, uattr.is_kernel),
 			attr->btf_size, attr->btf_log_level,
 			u64_to_user_ptr(attr->btf_log_buf),
 			attr->btf_log_size);
@@ -5815,147 +5815,39 @@ bool btf_id_set_contains(const struct btf_id_set *set, u32 id)
 	return bsearch(&id, set->ids, set->cnt, sizeof(u32), btf_id_cmp_func) != NULL;
 }
 
-#ifdef CONFIG_DEBUG_INFO_BTF_MODULES
-struct btf_module {
-	struct list_head list;
-	struct module *module;
+BPF_CALL_4(bpf_btf_find_by_name_kind, char *, name, int, name_sz,
+	   u32, kind, int, flags)
+{
 	struct btf *btf;
-	struct bin_attribute *sysfs_attr;
+	long ret;
+
+	if (flags)
+		return -EINVAL;
+
+	if (name_sz <= 1 || name[name_sz - 1])
+		return -EINVAL;
+
+	btf = bpf_get_btf_vmlinux();
+	if (IS_ERR(btf))
+		return PTR_ERR(btf);
+	if (!btf)
+		return -ENOENT;
+
+	/*
+	 * The 4.19 BTF implementation has no module-BTF registry or module
+	 * lifetime flags. Keep the vmlinux lookup exact and leave module lookup
+	 * for a separate, larger BTF/module adaptation.
+	 */
+	ret = btf_find_by_name_kind(btf, name, kind);
+	return ret;
+}
+
+const struct bpf_func_proto bpf_btf_find_by_name_kind_proto = {
+	.func		= bpf_btf_find_by_name_kind,
+	.gpl_only	= false,
+	.ret_type	= RET_INTEGER,
+	.arg1_type	= ARG_PTR_TO_MEM,
+	.arg2_type	= ARG_CONST_SIZE,
+	.arg3_type	= ARG_ANYTHING,
+	.arg4_type	= ARG_ANYTHING,
 };
-
-static LIST_HEAD(btf_modules);
-static DEFINE_MUTEX(btf_module_mutex);
-
-static ssize_t
-btf_module_read(struct file *file, struct kobject *kobj,
-		struct bin_attribute *bin_attr,
-		char *buf, loff_t off, size_t len)
-{
-	const struct btf *btf = bin_attr->private;
-
-	memcpy(buf, btf->data + off, len);
-	return len;
-}
-
-static int btf_module_notify(struct notifier_block *nb, unsigned long op,
-			     void *module)
-{
-	struct btf_module *btf_mod, *tmp;
-	struct module *mod = module;
-	struct btf *btf;
-	int err = 0;
-
-	if (mod->btf_data_size == 0 ||
-	    (op != MODULE_STATE_COMING && op != MODULE_STATE_GOING))
-		goto out;
-
-	switch (op) {
-	case MODULE_STATE_COMING:
-		btf_mod = kzalloc(sizeof(*btf_mod), GFP_KERNEL);
-		if (!btf_mod) {
-			err = -ENOMEM;
-			goto out;
-		}
-		btf = btf_parse_module(mod->name, mod->btf_data, mod->btf_data_size);
-		if (IS_ERR(btf)) {
-			pr_warn("failed to validate module [%s] BTF: %ld\n",
-				mod->name, PTR_ERR(btf));
-			kfree(btf_mod);
-			err = PTR_ERR(btf);
-			goto out;
-		}
-		err = btf_alloc_id(btf);
-		if (err) {
-			btf_free(btf);
-			kfree(btf_mod);
-			goto out;
-		}
-
-		mutex_lock(&btf_module_mutex);
-		btf_mod->module = module;
-		btf_mod->btf = btf;
-		list_add(&btf_mod->list, &btf_modules);
-		mutex_unlock(&btf_module_mutex);
-
-		if (IS_ENABLED(CONFIG_SYSFS)) {
-			struct bin_attribute *attr;
-
-			attr = kzalloc(sizeof(*attr), GFP_KERNEL);
-			if (!attr)
-				goto out;
-
-			sysfs_bin_attr_init(attr);
-			attr->attr.name = btf->name;
-			attr->attr.mode = 0444;
-			attr->size = btf->data_size;
-			attr->private = btf;
-			attr->read = btf_module_read;
-
-			err = sysfs_create_bin_file(btf_kobj, attr);
-			if (err) {
-				pr_warn("failed to register module [%s] BTF in sysfs: %d\n",
-					mod->name, err);
-				kfree(attr);
-				err = 0;
-				goto out;
-			}
-
-			btf_mod->sysfs_attr = attr;
-		}
-
-		break;
-	case MODULE_STATE_GOING:
-		mutex_lock(&btf_module_mutex);
-		list_for_each_entry_safe(btf_mod, tmp, &btf_modules, list) {
-			if (btf_mod->module != module)
-				continue;
-
-			list_del(&btf_mod->list);
-			if (btf_mod->sysfs_attr)
-				sysfs_remove_bin_file(btf_kobj, btf_mod->sysfs_attr);
-			btf_put(btf_mod->btf);
-			kfree(btf_mod->sysfs_attr);
-			kfree(btf_mod);
-			break;
-		}
-		mutex_unlock(&btf_module_mutex);
-		break;
-	}
-out:
-	return notifier_from_errno(err);
-}
-
-static struct notifier_block btf_module_nb = {
-	.notifier_call = btf_module_notify,
-};
-
-static int __init btf_module_init(void)
-{
-	register_module_notifier(&btf_module_nb);
-	return 0;
-}
-
-fs_initcall(btf_module_init);
-#endif /* CONFIG_DEBUG_INFO_BTF_MODULES */
-
-struct module *btf_try_get_module(const struct btf *btf)
-{
-	struct module *res = NULL;
-#ifdef CONFIG_DEBUG_INFO_BTF_MODULES
-	struct btf_module *btf_mod, *tmp;
-
-	mutex_lock(&btf_module_mutex);
-	list_for_each_entry_safe(btf_mod, tmp, &btf_modules, list) {
-		if (btf_mod->btf != btf)
-			continue;
-
-		if (try_module_get(btf_mod->module))
-			res = btf_mod->module;
-
-		break;
-	}
-	mutex_unlock(&btf_module_mutex);
-#endif
-
-	return res;
-}
