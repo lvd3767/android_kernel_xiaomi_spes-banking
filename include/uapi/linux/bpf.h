@@ -582,9 +582,11 @@ union bpf_attr {
 		union {
 			/* valid prog_fd to attach to bpf prog */
 			__u32		attach_prog_fd;
-			/* or valid module BTF object fd or 0 to attach to vmlinux */
+			/* valid kernel BTF object fd or 0 to attach to vmlinux */
 			__u32		attach_btf_obj_fd;
 		};
+		__u32		:32;		/* pad */
+		__aligned_u64	fd_array;
 	};
 
 	struct { /* anonymous struct used by BPF_OBJ_* commands */
@@ -3278,6 +3280,16 @@ union bpf_attr {
  * 	Return
  * 		Current *ktime*.
  *
+ * u64 bpf_ktime_get_coarse_ns(void)
+ * 	Description
+ * 		Return a coarse-grained version of the time elapsed since
+ * 		system boot, in nanoseconds. Does not include time the system
+ * 		was suspended.
+ *
+ * 		See: **clock_gettime**\ (**CLOCK_MONOTONIC_COARSE**)
+ * 	Return
+ * 		Current *ktime*.
+ *
  * long bpf_seq_printf(struct seq_file *m, const char *fmt, u32 fmt_size, const void *data, u32 data_len)
  * 	Description
  * 		**bpf_seq_printf**\ () uses seq_file **seq_printf**\ () to print
@@ -3673,6 +3685,28 @@ union bpf_attr {
  * 	Return
  * 		0 on success, or a negative error in case of failure.
  *
+ * long bpf_snprintf(char *str, u32 str_size, const char *fmt, u64 *data, u32 data_len)
+ *	Description
+ *		Outputs a string into the **str** buffer of size **str_size**
+ *		based on a format string stored in a read-only map pointed by
+ *		**fmt**.
+ *
+ *		Each format specifier in **fmt** corresponds to one u64 element
+ *		in the **data** array. For strings and pointers where pointees
+ *		are accessed, only the pointer values are stored in the *data*
+ *		array. The *data_len* is the size of *data* in bytes.
+ *
+ *		Formats **%s** and **%p{i,I}{4,6}** require kernel memory reads.
+ *		A failed read produces an empty string or a zero IP address.
+ *
+ *	Return
+ *		The strictly positive length of the formatted string, including
+ *		the trailing zero character. If the return value is greater than
+ *		**str_size**, **str** contains a truncated string, guaranteed to
+ *		be zero-terminated except when **str_size** is 0.
+ *
+ *		Or **-EBUSY** if the per-CPU memory copy buffer is busy.
+ *
  * long bpf_snprintf_btf(char *str, u32 str_size, struct btf_ptr *ptr, u32 btf_ptr_size, u64 flags)
  *	Description
  *		Use BTF to store a string representation of *ptr*->ptr in *str*,
@@ -3835,6 +3869,42 @@ union bpf_attr {
  *		*ARG_PTR_TO_BTF_ID* of type *task_struct*.
  *	Return
  *		Pointer to the current task.
+ *
+ * long bpf_bprm_opts_set(struct linux_binprm *bprm, u64 flags)
+ *	Description
+ *		Set or clear options on *bprm*. The
+ *		**BPF_F_BPRM_SECUREEXEC** flag sets the secureexec bit and
+ *		therefore the **AT_SECURE** auxiliary vector for glibc.
+ *	Return
+ *		0 on success, or **-EINVAL** for unsupported flags.
+ *
+ * struct socket *bpf_sock_from_file(struct file *file)
+ *	Description
+ *		If *file* represents a socket, return the associated socket.
+ *	Return
+ *		A pointer to a struct socket, or NULL if *file* is not a socket.
+ *
+ * long bpf_check_mtu(void *ctx, u32 ifindex, u32 *mtu_len, s32 len_diff, u64 flags)
+ *	Description
+ *		Check packet size against the MTU of the network device selected
+ *		by *ifindex*.  The helper is intended to be used before helpers
+ *		that adjust the packet size.  *len_diff* describes the planned
+ *		size change and may be negative.
+ *
+ *		An *ifindex* of zero uses the current device.  The input value of
+ *		*mtu_len*, when non-zero, is treated as an L3 packet length;
+ *		otherwise the packet context length is used.  On return *mtu_len*
+ *		contains the device MTU.
+ *
+ *		For **struct sk_buff** contexts, **BPF_MTU_CHK_SEGS** also checks
+ *		GSO segments and rejects a segment that still exceeds the MTU.
+ *		This flag cannot be combined with a non-zero *len_diff* or input
+ *		length.  The context is **struct xdp_md** for XDP programs and
+ *		**struct sk_buff** for TC cls_act programs.
+ *	Return
+ *		0 on success, **BPF_MTU_CHK_RET_FRAG_NEEDED** when the packet
+ *		exceeds the MTU, or **BPF_MTU_CHK_RET_SEGS_TOOBIG** for an
+ *		exceeding GSO segment.  Invalid arguments return a negative errno.
  *
  * u64 bpf_get_func_ip(void *ctx)
  *	Description
@@ -4047,6 +4117,22 @@ enum bpf_func_id {
 #undef __BPF_ENUM_FN
 
 /* All flags used by eBPF helper functions, placed here. */
+
+/* Flags for BPF_FUNC_bprm_opts_set helper. */
+enum {
+	BPF_F_BPRM_SECUREEXEC	= (1ULL << 0),
+};
+
+/* Flags and return values for BPF_FUNC_check_mtu helper. */
+enum bpf_check_mtu_flags {
+	BPF_MTU_CHK_SEGS = (1U << 0),
+};
+
+enum bpf_check_mtu_ret {
+	BPF_MTU_CHK_RET_SUCCESS,
+	BPF_MTU_CHK_RET_FRAG_NEEDED,
+	BPF_MTU_CHK_RET_SEGS_TOOBIG,
+};
 
 /* BPF_FUNC_skb_store_bytes flags. */
 enum {
@@ -4576,6 +4662,8 @@ struct bpf_link_info {
 		} raw_tracepoint;
 		struct {
 			__u32 attach_type;
+			__u32 target_obj_id;
+			__u32 target_btf_id;
 		} tracing;
 		struct {
 			__u64 cgroup_id;

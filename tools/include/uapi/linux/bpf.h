@@ -87,6 +87,12 @@ struct bpf_cgroup_storage_key {
 	__u32	attach_type;		/* program attach type */
 };
 
+union bpf_iter_link_info {
+	struct {
+		__u32	map_fd;
+	} map;
+};
+
 /* BPF syscall commands, see bpf(2) man-page for details. */
 enum bpf_cmd {
 	BPF_MAP_CREATE,
@@ -199,6 +205,8 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_STRUCT_OPS,
 	BPF_PROG_TYPE_EXT,
 	BPF_PROG_TYPE_LSM,
+	BPF_PROG_TYPE_SK_LOOKUP,
+	BPF_PROG_TYPE_SYSCALL, /* a program that can execute syscalls */
 };
 
 enum bpf_attach_type {
@@ -238,6 +246,12 @@ enum bpf_attach_type {
 	BPF_XDP_DEVMAP,
 	BPF_CGROUP_INET_SOCK_RELEASE,
 	BPF_XDP_CPUMAP,
+	BPF_SK_LOOKUP,
+	BPF_XDP,
+	BPF_SK_SKB_VERDICT,
+	BPF_SK_REUSEPORT_SELECT,
+	BPF_SK_REUSEPORT_SELECT_OR_MIGRATE,
+	BPF_PERF_EVENT,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -250,15 +264,10 @@ enum bpf_link_type {
 	BPF_LINK_TYPE_CGROUP = 3,
 	BPF_LINK_TYPE_ITER = 4,
 	BPF_LINK_TYPE_NETNS = 5,
+	BPF_LINK_TYPE_XDP = 6,
+	BPF_LINK_TYPE_PERF_EVENT = 7,
 
 	MAX_BPF_LINK_TYPE,
-};
-
-enum bpf_iter_link_info {
-	BPF_ITER_LINK_UNSPEC = 0,
-	BPF_ITER_LINK_MAP_FD = 1,
-
-	MAX_BPF_ITER_LINK_INFO,
 };
 
 /* cgroup-bpf attach flags used in BPF_PROG_ATTACH command
@@ -572,9 +581,11 @@ union bpf_attr {
 		union {
 			/* valid prog_fd to attach to bpf prog */
 			__u32		attach_prog_fd;
-			/* or valid module BTF object fd or 0 to attach to vmlinux */
+			/* valid kernel BTF object fd or 0 to attach to vmlinux */
 			__u32		attach_btf_obj_fd;
 		};
+		__u32		:32;
+		__aligned_u64	fd_array;
 	};
 
 	struct { /* anonymous struct used by BPF_OBJ_* commands */
@@ -675,7 +686,10 @@ union bpf_attr {
 
 	struct { /* struct used by BPF_LINK_CREATE command */
 		__u32		prog_fd;	/* eBPF program to attach */
-		__u32		target_fd;	/* object to attach to */
+		union {
+			__u32		target_fd;	/* object to attach to */
+			__u32		target_ifindex; /* target ifindex */
+		};
 		__u32		attach_type;	/* attach type */
 		__u32		flags;		/* extra flags */
 		union {
@@ -684,6 +698,10 @@ union bpf_attr {
 				__aligned_u64	iter_info;	/* extra bpf_iter_link_info */
 				__u32		iter_info_len;	/* iter_info length */
 			};
+			struct {
+				/* user-provided value passed to the BPF program */
+				__u64		bpf_cookie;
+			} perf_event;
 		};
 	} link_create;
 
@@ -696,6 +714,10 @@ union bpf_attr {
 		 * BPF_F_REPLACE flag is set in flags */
 		__u32		old_prog_fd;
 	} link_update;
+
+	struct {
+		__u32		link_fd;
+	} link_detach;
 
 	struct { /* struct used by BPF_ENABLE_STATS command */
 		__u32		type;
@@ -3203,6 +3225,16 @@ union bpf_attr {
  * 	Return
  * 		Current *ktime*.
  *
+ * u64 bpf_ktime_get_coarse_ns(void)
+ * 	Description
+ * 		Return a coarse-grained version of the time elapsed since
+ * 		system boot, in nanoseconds. Does not include time the system
+ * 		was suspended.
+ *
+ * 		See: **clock_gettime**\ (**CLOCK_MONOTONIC_COARSE**)
+ * 	Return
+ * 		Current *ktime*.
+ *
  * long bpf_seq_printf(struct seq_file *m, const char *fmt, u32 fmt_size, const void *data, u32 data_len)
  * 	Description
  * 		**bpf_seq_printf**\ () uses seq_file **seq_printf**\ () to print
@@ -3595,6 +3627,28 @@ union bpf_attr {
  * 	Return
  * 		0 on success, or a negative error in case of failure.
  *
+ * long bpf_snprintf(char *str, u32 str_size, const char *fmt, u64 *data, u32 data_len)
+ *	Description
+ *		Outputs a string into the **str** buffer of size **str_size**
+ *		based on a format string stored in a read-only map pointed by
+ *		**fmt**.
+ *
+ *		Each format specifier in **fmt** corresponds to one u64 element
+ *		in the **data** array. For strings and pointers where pointees
+ *		are accessed, only the pointer values are stored in the *data*
+ *		array. The *data_len* is the size of *data* in bytes.
+ *
+ *		Formats **%s** and **%p{i,I}{4,6}** require kernel memory reads.
+ *		A failed read produces an empty string or a zero IP address.
+ *
+ *	Return
+ *		The strictly positive length of the formatted string, including
+ *		the trailing zero character. If the return value is greater than
+ *		**str_size**, **str** contains a truncated string, guaranteed to
+ *		be zero-terminated except when **str_size** is 0.
+ *
+ *		Or **-EBUSY** if the per-CPU memory copy buffer is busy.
+ *
  * long bpf_snprintf_btf(char *str, u32 str_size, struct btf_ptr *ptr, u32 btf_ptr_size, u64 flags)
  *	Description
  *		Use BTF to store a string representation of *ptr*->ptr in *str*,
@@ -3760,103 +3814,39 @@ union bpf_attr {
  *
  * long bpf_bprm_opts_set(struct linux_binprm *bprm, u64 flags)
  *	Description
- *		Set or clear certain options on *bprm*:
- *
- *		**BPF_F_BPRM_SECUREEXEC** Set the secureexec bit
- *		which sets the **AT_SECURE** auxv for glibc. The bit
- *		is cleared if the flag is not specified.
+ *		Set or clear options on *bprm*. The
+ *		**BPF_F_BPRM_SECUREEXEC** flag sets the secureexec bit and
+ *		therefore the **AT_SECURE** auxiliary vector for glibc.
  *	Return
- *		**-EINVAL** if invalid *flags* are passed, zero otherwise.
- *
- * u64 bpf_ktime_get_coarse_ns(void)
- * 	Description
- * 		Return a coarse-grained version of the time elapsed since
- * 		system boot, in nanoseconds. Does not include time the system
- * 		was suspended.
- *
- * 		See: **clock_gettime**\ (**CLOCK_MONOTONIC_COARSE**)
- * 	Return
- * 		Current *ktime*.
- *
- * long bpf_ima_inode_hash(struct inode *inode, void *dst, u32 size)
- *	Description
- *		Returns the stored IMA hash of the *inode* (if it's avaialable).
- *		If the hash is larger than *size*, then only *size*
- *		bytes will be copied to *dst*
- *	Return
- *		The **hash_algo** is returned on success,
- *		**-EOPNOTSUP** if IMA is disabled or **-EINVAL** if
- *		invalid arguments are passed.
+ *		0 on success, or **-EINVAL** for unsupported flags.
  *
  * struct socket *bpf_sock_from_file(struct file *file)
  *	Description
- *		If the given file represents a socket, returns the associated
- *		socket.
+ *		If *file* represents a socket, return the associated socket.
  *	Return
- *		A pointer to a struct socket on success or NULL if the file is
- *		not a socket.
+ *		A pointer to a struct socket, or NULL if *file* is not a socket.
  *
  * long bpf_check_mtu(void *ctx, u32 ifindex, u32 *mtu_len, s32 len_diff, u64 flags)
  *	Description
- *		Check ctx packet size against exceeding MTU of net device (based
- *		on *ifindex*).  This helper will likely be used in combination
- *		with helpers that adjust/change the packet size.
+ *		Check packet size against the MTU of the network device selected
+ *		by *ifindex*.  The helper is intended to be used before helpers
+ *		that adjust the packet size.  *len_diff* describes the planned
+ *		size change and may be negative.
  *
- *		The argument *len_diff* can be used for querying with a planned
- *		size change. This allows to check MTU prior to changing packet
- *		ctx. Providing an *len_diff* adjustment that is larger than the
- *		actual packet size (resulting in negative packet size) will in
- *		principle not exceed the MTU, why it is not considered a
- *		failure.  Other BPF-helpers are needed for performing the
- *		planned size change, why the responsability for catch a negative
- *		packet size belong in those helpers.
+ *		An *ifindex* of zero uses the current device.  The input value of
+ *		*mtu_len*, when non-zero, is treated as an L3 packet length;
+ *		otherwise the packet context length is used.  On return *mtu_len*
+ *		contains the device MTU.
  *
- *		Specifying *ifindex* zero means the MTU check is performed
- *		against the current net device.  This is practical if this isn't
- *		used prior to redirect.
- *
- *		The Linux kernel route table can configure MTUs on a more
- *		specific per route level, which is not provided by this helper.
- *		For route level MTU checks use the **bpf_fib_lookup**\ ()
- *		helper.
- *
- *		*ctx* is either **struct xdp_md** for XDP programs or
- *		**struct sk_buff** for tc cls_act programs.
- *
- *		The *flags* argument can be a combination of one or more of the
- *		following values:
- *
- *		**BPF_MTU_CHK_SEGS**
- *			This flag will only works for *ctx* **struct sk_buff**.
- *			If packet context contains extra packet segment buffers
- *			(often knows as GSO skb), then MTU check is harder to
- *			check at this point, because in transmit path it is
- *			possible for the skb packet to get re-segmented
- *			(depending on net device features).  This could still be
- *			a MTU violation, so this flag enables performing MTU
- *			check against segments, with a different violation
- *			return code to tell it apart. Check cannot use len_diff.
- *
- *		On return *mtu_len* pointer contains the MTU value of the net
- *		device.  Remember the net device configured MTU is the L3 size,
- *		which is returned here and XDP and TX length operate at L2.
- *		Helper take this into account for you, but remember when using
- *		MTU value in your BPF-code.  On input *mtu_len* must be a valid
- *		pointer and be initialized (to zero), else verifier will reject
- *		BPF program.
- *
+ *		For **struct sk_buff** contexts, **BPF_MTU_CHK_SEGS** also checks
+ *		GSO segments and rejects a segment that still exceeds the MTU.
+ *		This flag cannot be combined with a non-zero *len_diff* or input
+ *		length.  The context is **struct xdp_md** for XDP programs and
+ *		**struct sk_buff** for TC cls_act programs.
  *	Return
- *		* 0 on success, and populate MTU value in *mtu_len* pointer.
- *
- *		* < 0 if any input argument is invalid (*mtu_len* not updated)
- *
- *		MTU violations return positive values, but also populate MTU
- *		value in *mtu_len* pointer, as this can be needed for
- *		implementing PMTU handing:
- *
- *		* **BPF_MTU_CHK_RET_FRAG_NEEDED**
- *		* **BPF_MTU_CHK_RET_SEGS_TOOBIG**
- *
+ *		0 on success, **BPF_MTU_CHK_RET_FRAG_NEEDED** when the packet
+ *		exceeds the MTU, or **BPF_MTU_CHK_RET_SEGS_TOOBIG** for an
+ *		exceeding GSO segment.  Invalid arguments return a negative errno.
  */
 #define __BPF_FUNC_MAPPER(FN)		\
 	FN(unspec),			\
@@ -4049,6 +4039,22 @@ enum bpf_func_id {
 
 /* All flags used by eBPF helper functions, placed here. */
 
+/* Flags for BPF_FUNC_bprm_opts_set helper. */
+enum {
+	BPF_F_BPRM_SECUREEXEC	= (1ULL << 0),
+};
+
+/* Flags and return values for BPF_FUNC_check_mtu helper. */
+enum bpf_check_mtu_flags {
+	BPF_MTU_CHK_SEGS = (1U << 0),
+};
+
+enum bpf_check_mtu_ret {
+	BPF_MTU_CHK_RET_SUCCESS,
+	BPF_MTU_CHK_RET_FRAG_NEEDED,
+	BPF_MTU_CHK_RET_SEGS_TOOBIG,
+};
+
 /* BPF_FUNC_skb_store_bytes flags. */
 enum {
 	BPF_F_RECOMPUTE_CSUM		= (1ULL << 0),
@@ -4180,6 +4186,12 @@ enum {
 	BPF_RINGBUF_BUSY_BIT		= (1U << 31),
 	BPF_RINGBUF_DISCARD_BIT		= (1U << 30),
 	BPF_RINGBUF_HDR_SZ		= 8,
+};
+
+/* BPF_FUNC_sk_assign flags in bpf_sk_lookup context. */
+enum {
+	BPF_SK_LOOKUP_F_REPLACE		= (1ULL << 0),
+	BPF_SK_LOOKUP_F_NO_REUSEPORT	= (1ULL << 1),
 };
 
 /* Mode for BPF_FUNC_skb_adjust_room helper. */
@@ -4570,6 +4582,8 @@ struct bpf_link_info {
 		} raw_tracepoint;
 		struct {
 			__u32 attach_type;
+			__u32 target_obj_id;
+			__u32 target_btf_id;
 		} tracing;
 		struct {
 			__u64 cgroup_id;
@@ -4588,6 +4602,9 @@ struct bpf_link_info {
 			__u32 netns_ino;
 			__u32 attach_type;
 		} netns;
+		struct {
+			__u32 ifindex;
+		} xdp;
 	};
 } __attribute__((aligned(8)));
 
