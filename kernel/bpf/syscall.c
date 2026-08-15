@@ -2144,7 +2144,7 @@ static bool is_perfmon_prog_type(enum bpf_prog_type prog_type)
 }
 
 /* last field in 'union bpf_attr' used by this command */
-#define	BPF_PROG_LOAD_LAST_FIELD attach_prog_fd
+#define	BPF_PROG_LOAD_LAST_FIELD fd_array
 
 static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 {
@@ -2194,7 +2194,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 		return -EPERM;
 
 	/* attach_prog_fd/attach_btf_obj_fd can specify fd of either bpf_prog
-	 * or btf, we need to check which one it is
+	 * or btf, we need to check which one it is.
 	 */
 	if (attr->attach_prog_fd) {
 		dst_prog = bpf_prog_get(attr->attach_prog_fd);
@@ -2204,9 +2204,6 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 			if (IS_ERR(attach_btf))
 				return -EINVAL;
 			if (!btf_is_kernel(attach_btf)) {
-				/* attaching through specifying bpf_prog's BTF
-				 * objects directly might be supported eventually
-				 */
 				btf_put(attach_btf);
 				return -ENOTSUPP;
 			}
@@ -2241,6 +2238,11 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 			btf_put(attach_btf);
 		return -ENOMEM;
 	}
+
+	prog->expected_attach_type = attr->expected_attach_type;
+	prog->aux->attach_btf = attach_btf;
+	prog->aux->attach_btf_id = attr->attach_btf_id;
+	prog->aux->dst_prog = dst_prog;
 
 	prog->expected_attach_type = attr->expected_attach_type;
 	prog->aux->attach_btf = attach_btf;
@@ -2331,7 +2333,7 @@ free_used_maps:
 free_prog_sec:
 	free_uid(prog->aux->user);
 	security_bpf_prog_free(prog->aux);
-free_prog:
+free_prog_nouncharge:
 	if (prog->aux->attach_btf)
 		btf_put(prog->aux->attach_btf);
 	bpf_prog_free(prog);
@@ -2729,8 +2731,15 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
          * specified on load is illegal, and we reject that here.
 	 */
 	if (!prog->aux->dst_trampoline && !tgt_prog) {
-		err = -ENOENT;
-		goto out_unlock;
+		/* Allow re-attach for TRACING and LSM programs. */
+		if (prog->type != BPF_PROG_TYPE_TRACING &&
+		    prog->type != BPF_PROG_TYPE_LSM) {
+			err = -EINVAL;
+			goto out_unlock;
+		}
+		btf_id = prog->aux->attach_btf_id;
+		key = bpf_trampoline_compute_key(NULL, prog->aux->attach_btf,
+						btf_id);
 	}
 
 	if (!prog->aux->dst_trampoline ||

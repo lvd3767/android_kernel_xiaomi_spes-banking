@@ -2244,7 +2244,7 @@ static void bpf_free_used_maps(struct bpf_prog_aux *aux)
 }
 
 void __bpf_free_used_btfs(struct bpf_prog_aux *aux,
-			  struct btf_mod_pair *used_btfs, u32 len)
+				  struct btf_mod_pair *used_btfs, u32 len)
 {
 #ifdef CONFIG_BPF_SYSCALL
 	struct btf_mod_pair *btf_mod;

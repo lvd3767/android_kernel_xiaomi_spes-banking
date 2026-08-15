@@ -510,8 +510,8 @@ struct bpf_verifier_ops {
 				  struct bpf_insn *dst,
 				  struct bpf_prog *prog, u32 *target_size);
 	int (*btf_struct_access)(struct bpf_verifier_log *log,
-				 const struct btf *btf,
-				 const struct btf_type *t, int off, int size,
+					 const struct btf *btf,
+					 const struct btf_type *t, int off, int size,
 				 enum bpf_access_type atype,
 				 u32 *next_btf_id);
 	ANDROID_KABI_RESERVE(1);
@@ -1842,7 +1842,9 @@ static inline struct bpf_prog *bpf_prog_get_type(u32 ufd,
 }
 
 void __bpf_free_used_maps(struct bpf_prog_aux *aux,
-			  struct bpf_map **used_maps, u32 len);
+				  struct bpf_map **used_maps, u32 len);
+void __bpf_free_used_btfs(struct bpf_prog_aux *aux,
+				  struct btf_mod_pair *used_btfs, u32 len);
 
 bool bpf_prog_get_ok(struct bpf_prog *, enum bpf_prog_type *, bool);
 
