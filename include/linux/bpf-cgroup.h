@@ -272,24 +272,22 @@ int bpf_percpu_cgroup_storage_update(struct bpf_map *map, void *key,
 
 #define BPF_CGROUP_RUN_SA_PROG(sk, uaddr, type)				       \
 ({									       \
-	u32 __unused_flags;						       \
+	u32 __unused_flags = 0;							       \
 	int __ret = 0;							       \
 	if (cgroup_bpf_enabled(type))					       \
 		__ret = __cgroup_bpf_run_filter_sock_addr(sk, uaddr, type,     \
-							  NULL,		       \
-							  &__unused_flags);    \
+							  NULL, &__unused_flags);	\
 	__ret;								       \
 })
 
 #define BPF_CGROUP_RUN_SA_PROG_LOCK(sk, uaddr, type, t_ctx)		       \
 ({									       \
-	u32 __unused_flags;						       \
+	u32 __unused_flags = 0;							       \
 	int __ret = 0;							       \
 	if (cgroup_bpf_enabled(type))	{				       \
 		lock_sock(sk);						       \
 		__ret = __cgroup_bpf_run_filter_sock_addr(sk, uaddr, type,     \
-							  t_ctx,	       \
-							  &__unused_flags);    \
+							  t_ctx, &__unused_flags);	\
 		release_sock(sk);					       \
 	}								       \
 	__ret;								       \

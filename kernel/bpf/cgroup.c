@@ -1142,8 +1142,19 @@ int __cgroup_bpf_run_filter_sock_addr(struct sock *sk,
 	}
 
 	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
-	ret = BPF_PROG_RUN_ARRAY_FLAGS(cgrp->bpf.effective[type], &ctx,
-				       BPF_PROG_RUN, flags);
+	if (unlikely(!cgrp))
+		return 0;
+
+	rcu_read_lock();
+	prog_array = rcu_dereference(cgrp->bpf.effective[type]);
+	if (unlikely(!prog_array)) {
+		rcu_read_unlock();
+		return 0;
+	}
+ 
+	ret = BPF_PROG_RUN_ARRAY_CG_FLAGS(prog_array, &ctx, BPF_PROG_RUN,
+					  flags);
+	rcu_read_unlock();
 
 	return ret == 1 ? 0 : -EPERM;
 }
