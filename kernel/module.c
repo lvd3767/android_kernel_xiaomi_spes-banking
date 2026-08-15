@@ -387,20 +387,18 @@ static unsigned int find_any_sec(const struct load_info *info, const char *name)
 
 	for (i = 1; i < info->hdr->e_shnum; i++) {
 		Elf_Shdr *shdr = &info->sechdrs[i];
+
 		if (strcmp(info->secstrings + shdr->sh_name, name) == 0)
 			return i;
 	}
 	return 0;
 }
 
-/*
- * Find a module section, or NULL. Fill in number of "objects" in section.
- * Ignores SHF_ALLOC flag.
- */
+/* Find a module section, or NULL. Ignores SHF_ALLOC flag. */
 static __maybe_unused void *any_section_objs(const struct load_info *info,
-					     const char *name,
-					     size_t object_size,
-					     unsigned int *num)
+						     const char *name,
+						     size_t object_size,
+						     unsigned int *num)
 {
 	unsigned int sec = find_any_sec(info, name);
 

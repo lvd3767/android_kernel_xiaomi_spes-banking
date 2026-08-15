@@ -20,12 +20,17 @@
 #include <linux/bpf_verifier.h>
 #include <linux/btf.h>
 #include <linux/btf_ids.h>
+#include <linux/module.h>
 #include <linux/skmsg.h>
 #include <linux/perf_event.h>
 #include <linux/bsearch.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <net/sock.h>
+
+#ifdef CONFIG_DEBUG_INFO_BTF_MODULES
+extern struct kobject *btf_kobj;
+#endif
 
 /* BTF (BPF Type Format) is the meta data format which describes
  * the data types of BPF program/map.  Hence, it basically focus
@@ -174,7 +179,7 @@
 #define BITS_ROUNDUP_BYTES(bits) \
 	(BITS_ROUNDDOWN_BYTES(bits) + !!BITS_PER_BYTE_MASKED(bits))
 
-#define BTF_INFO_MASK 0x8f00ffff
+#define BTF_INFO_MASK 0x9f00ffff
 #define BTF_INT_MASK 0x0fffffff
 #define BTF_TYPE_ID_VALID(type_id) ((type_id) <= BTF_MAX_TYPE)
 #define BTF_STR_OFFSET_VALID(name_off) ((name_off) <= BTF_MAX_NAME_OFFSET)
@@ -281,6 +286,7 @@ static const char * const btf_kind_str[NR_BTF_KINDS] = {
 	[BTF_KIND_FUNC_PROTO]	= "FUNC_PROTO",
 	[BTF_KIND_VAR]		= "VAR",
 	[BTF_KIND_DATASEC]	= "DATASEC",
+	[BTF_KIND_FLOAT]	= "FLOAT",
 };
 
 static const char *btf_type_str(const struct btf_type *t)
@@ -575,6 +581,7 @@ static bool btf_type_has_size(const struct btf_type *t)
 	case BTF_KIND_UNION:
 	case BTF_KIND_ENUM:
 	case BTF_KIND_DATASEC:
+	case BTF_KIND_FLOAT:
 		return true;
 	}
 
@@ -1612,7 +1619,7 @@ static bool env_type_is_resolved(const struct btf_verifier_env *env,
 }
 
 static int env_stack_push(struct btf_verifier_env *env,
-			  const struct btf_type *t, u32 type_id)
+				  const struct btf_type *t, u32 type_id)
 {
 	const struct btf *btf = env->btf;
 	struct resolve_vertex *v;
@@ -1701,6 +1708,7 @@ __btf_resolve_size(const struct btf *btf, const struct btf_type *type,
 		case BTF_KIND_STRUCT:
 		case BTF_KIND_UNION:
 		case BTF_KIND_ENUM:
+		case BTF_KIND_FLOAT:
 			size = type->size;
 			goto resolved;
 
@@ -1846,7 +1854,7 @@ static int btf_df_check_kflag_member(struct btf_verifier_env *env,
 	return -EINVAL;
 }
 
-/* Used for ptr, array and struct/union type members.
+/* Used for ptr, array, struct/union and float type members.
  * int, enum and modifier types have their specific callback functions.
  */
 static int btf_generic_check_kflag_member(struct btf_verifier_env *env,
@@ -3673,6 +3681,78 @@ static const struct btf_kind_operations datasec_ops = {
 	.show			= btf_datasec_show,
 };
 
+static s32 btf_float_check_meta(struct btf_verifier_env *env,
+				const struct btf_type *t,
+				u32 meta_left)
+{
+	if (btf_type_vlen(t)) {
+		btf_verifier_log_type(env, t, "vlen != 0");
+		return -EINVAL;
+	}
+
+	if (btf_type_kflag(t)) {
+		btf_verifier_log_type(env, t, "Invalid btf_info kind_flag");
+		return -EINVAL;
+	}
+
+	if (t->size != 2 && t->size != 4 && t->size != 8 && t->size != 12 &&
+	    t->size != 16) {
+		btf_verifier_log_type(env, t, "Invalid type_size");
+		return -EINVAL;
+	}
+
+	btf_verifier_log_type(env, t, NULL);
+
+	return 0;
+}
+
+static int btf_float_check_member(struct btf_verifier_env *env,
+				  const struct btf_type *struct_type,
+				  const struct btf_member *member,
+				  const struct btf_type *member_type)
+{
+	u64 start_offset_bytes;
+	u64 end_offset_bytes;
+	u64 misalign_bits;
+	u64 align_bytes;
+	u64 align_bits;
+
+	/* Keep the alignment check architecture-independent for CO-RE BTF. */
+	align_bytes = min_t(u64, sizeof(void *), member_type->size);
+	align_bits = align_bytes * BITS_PER_BYTE;
+	div64_u64_rem(member->offset, align_bits, &misalign_bits);
+	if (misalign_bits) {
+		btf_verifier_log_member(env, struct_type, member,
+					"Member is not properly aligned");
+		return -EINVAL;
+	}
+
+	start_offset_bytes = member->offset / BITS_PER_BYTE;
+	end_offset_bytes = start_offset_bytes + member_type->size;
+	if (end_offset_bytes > struct_type->size) {
+		btf_verifier_log_member(env, struct_type, member,
+					"Member exceeds struct_size");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void btf_float_log(struct btf_verifier_env *env,
+			  const struct btf_type *t)
+{
+	btf_verifier_log(env, "size=%u", t->size);
+}
+
+static const struct btf_kind_operations float_ops = {
+	.check_meta = btf_float_check_meta,
+	.resolve = btf_df_resolve,
+	.check_member = btf_float_check_member,
+	.check_kflag_member = btf_generic_check_kflag_member,
+	.log_details = btf_float_log,
+	.show = btf_df_show,
+};
+
 static int btf_func_proto_check(struct btf_verifier_env *env,
 				const struct btf_type *t)
 {
@@ -3811,6 +3891,7 @@ static const struct btf_kind_operations * const kind_ops[NR_BTF_KINDS] = {
 	[BTF_KIND_FUNC_PROTO] = &func_proto_ops,
 	[BTF_KIND_VAR] = &var_ops,
 	[BTF_KIND_DATASEC] = &datasec_ops,
+	[BTF_KIND_FLOAT] = &float_ops,
 };
 
 static s32 btf_check_meta(struct btf_verifier_env *env,
@@ -4440,10 +4521,11 @@ struct btf *btf_parse_vmlinux(void)
 	}
 	env->btf = btf;
 
-	btf->data = __start_BTF;
-	btf->data_size = __stop_BTF - __start_BTF;
+	btf->data = _binary__btf_vmlinux_bin_start;
+	btf->data_size = _binary__btf_vmlinux_bin_end -
+		_binary__btf_vmlinux_bin_start;
 	btf->kernel_btf = true;
-	snprintf(btf->name, sizeof(btf->name), "vmlinux");
+	strscpy(btf->name, "vmlinux", sizeof(btf->name));
 
 	err = btf_parse_hdr(env);
 	if (err)
@@ -4470,7 +4552,6 @@ struct btf *btf_parse_vmlinux(void)
 	bpf_struct_ops_init(btf, log);
 
 	refcount_set(&btf->refcnt, 1);
-
 	err = btf_alloc_id(btf);
 	if (err)
 		goto errout;
@@ -4488,8 +4569,8 @@ errout:
 }
 
 #ifdef CONFIG_DEBUG_INFO_BTF_MODULES
-
-static struct btf *btf_parse_module(const char *module_name, const void *data, unsigned int data_size)
+static struct btf *btf_parse_module(const char *module_name,
+				     const void *data, unsigned int data_size)
 {
 	struct btf_verifier_env *env = NULL;
 	struct bpf_verifier_log *log;
@@ -4520,7 +4601,7 @@ static struct btf *btf_parse_module(const char *module_name, const void *data, u
 	btf->start_id = base_btf->nr_types;
 	btf->start_str_off = base_btf->hdr.str_len;
 	btf->kernel_btf = true;
-	snprintf(btf->name, sizeof(btf->name), "%s", module_name);
+	strscpy(btf->name, module_name, sizeof(btf->name));
 
 	btf->data = kvmalloc(data_size, GFP_KERNEL | __GFP_NOWARN);
 	if (!btf->data) {
@@ -4557,7 +4638,6 @@ errout:
 	}
 	return ERR_PTR(err);
 }
-
 #endif /* CONFIG_DEBUG_INFO_BTF_MODULES */
 
 struct btf *bpf_prog_get_target_btf(const struct bpf_prog *prog)
@@ -4566,8 +4646,9 @@ struct btf *bpf_prog_get_target_btf(const struct bpf_prog *prog)
 
 	if (tgt_prog)
 		return tgt_prog->aux->btf;
-	else
-		return prog->aux->attach_btf;
+	} else {
+		return prog->aux->attach_btf ?: btf_vmlinux;
+	}
 }
 
 static bool is_string_ptr(struct btf *btf, const struct btf_type *t)
@@ -4688,6 +4769,7 @@ bool btf_ctx_access(int off, int size, enum bpf_access_type type,
 		    (ctx_arg_info->reg_type == PTR_TO_RDONLY_BUF_OR_NULL ||
 		     ctx_arg_info->reg_type == PTR_TO_RDWR_BUF_OR_NULL)) {
 			info->reg_type = ctx_arg_info->reg_type;
+			info->btf = btf_vmlinux;
 			return true;
 		}
 	}
@@ -4760,8 +4842,9 @@ enum bpf_struct_walk_result {
 	WALK_STRUCT,
 };
 
-static int btf_struct_walk(struct bpf_verifier_log *log, const struct btf *btf,
-			   const struct btf_type *t, int off, int size,
+static int btf_struct_walk(struct bpf_verifier_log *log,
+			   const struct btf *btf, const struct btf_type *t,
+			   int off, int size,
 			   u32 *next_btf_id)
 {
 	u32 i, moff, mtrue_end, msize = 0, total_nelems = 0;
@@ -4986,8 +5069,9 @@ error:
 	return -EINVAL;
 }
 
-int btf_struct_access(struct bpf_verifier_log *log, const struct btf *btf,
-		      const struct btf_type *t, int off, int size,
+int btf_struct_access(struct bpf_verifier_log *log,
+		      const struct btf *btf, const struct btf_type *t,
+		      int off, int size,
 		      enum bpf_access_type atype __maybe_unused,
 		      u32 *next_btf_id)
 {
@@ -5027,11 +5111,6 @@ int btf_struct_access(struct bpf_verifier_log *log, const struct btf *btf,
 	return -EINVAL;
 }
 
-/* Check that two BTF types, each specified as an BTF object + id, are exactly
- * the same. Trivial ID check is not enough due to module BTFs, because we can
- * end up with two different module BTFs, but IDs point to the common type in
- * vmlinux BTF.
- */
 static bool btf_types_are_same(const struct btf *btf1, u32 id1,
 			       const struct btf *btf2, u32 id2)
 {
@@ -5728,6 +5807,28 @@ int btf_get_info_by_fd(const struct btf *btf,
 		return -EFAULT;
 
 	info.id = btf->id;
+	info.kernel_btf = btf->kernel_btf;
+	uname = u64_to_user_ptr(info.name);
+	uname_len = info.name_len;
+	if (!uname ^ !uname_len)
+		return -EINVAL;
+
+	name_len = strlen(btf->name);
+	info.name_len = name_len;
+	if (uname) {
+		if (uname_len >= name_len + 1) {
+			if (copy_to_user(uname, btf->name, name_len + 1))
+				return -EFAULT;
+		} else {
+			char zero = '\0';
+
+			if (copy_to_user(uname, btf->name, uname_len - 1))
+				return -EFAULT;
+			if (put_user(zero, uname + uname_len - 1))
+				return -EFAULT;
+			ret = -ENOSPC;
+		}
+	}
 	ubtf = u64_to_user_ptr(info.btf);
 	btf_copy = min_t(u32, btf->data_size, info.btf_size);
 	if (copy_to_user(ubtf, btf->data, btf_copy))
@@ -5793,6 +5894,11 @@ u32 btf_obj_id(const struct btf *btf)
 	return btf->id;
 }
 
+u32 btf_obj_id(const struct btf *btf)
+{
+	return btf->id;
+}
+
 bool btf_is_kernel(const struct btf *btf)
 {
 	return btf->kernel_btf;
@@ -5815,6 +5921,152 @@ bool btf_id_set_contains(const struct btf_id_set *set, u32 id)
 	return bsearch(&id, set->ids, set->cnt, sizeof(u32), btf_id_cmp_func) != NULL;
 }
 
+#ifdef CONFIG_DEBUG_INFO_BTF_MODULES
+struct btf_module {
+	struct list_head list;
+	struct module *module;
+	struct btf *btf;
+	struct bin_attribute *sysfs_attr;
+};
+
+static LIST_HEAD(btf_modules);
+static DEFINE_MUTEX(btf_module_mutex);
+
+static ssize_t
+btf_module_read(struct file *file, struct kobject *kobj,
+		struct bin_attribute *bin_attr,
+		char *buf, loff_t off, size_t len)
+{
+	const struct btf *btf = bin_attr->private;
+
+	memcpy(buf, btf->data + off, len);
+	return len;
+}
+
+static int btf_module_notify(struct notifier_block *nb, unsigned long op,
+			     void *module)
+{
+	struct btf_module *btf_mod, *tmp;
+	struct module *mod = module;
+	struct btf *btf;
+	int err = 0;
+
+	if (mod->btf_data_size == 0 ||
+	    (op != MODULE_STATE_COMING && op != MODULE_STATE_GOING))
+		goto out;
+
+	switch (op) {
+	case MODULE_STATE_COMING:
+		btf_mod = kzalloc(sizeof(*btf_mod), GFP_KERNEL);
+		if (!btf_mod) {
+			err = -ENOMEM;
+			goto out;
+		}
+
+		btf = btf_parse_module(mod->name, mod->btf_data,
+				       mod->btf_data_size);
+		if (IS_ERR(btf)) {
+			pr_warn("failed to validate module [%s] BTF: %ld\n",
+				mod->name, PTR_ERR(btf));
+			kfree(btf_mod);
+			err = PTR_ERR(btf);
+			goto out;
+		}
+
+		err = btf_alloc_id(btf);
+		if (err) {
+			btf_free(btf);
+			kfree(btf_mod);
+			goto out;
+		}
+
+		mutex_lock(&btf_module_mutex);
+		btf_mod->module = mod;
+		btf_mod->btf = btf;
+		list_add(&btf_mod->list, &btf_modules);
+		mutex_unlock(&btf_module_mutex);
+
+		if (IS_ENABLED(CONFIG_SYSFS)) {
+			struct bin_attribute *attr;
+
+			attr = kzalloc(sizeof(*attr), GFP_KERNEL);
+			if (!attr)
+				break;
+
+			sysfs_bin_attr_init(attr);
+			attr->attr.name = btf->name;
+			attr->attr.mode = 0444;
+			attr->size = btf->data_size;
+			attr->private = btf;
+			attr->read = btf_module_read;
+
+			err = sysfs_create_bin_file(btf_kobj, attr);
+			if (err) {
+				pr_warn("failed to register module [%s] BTF in sysfs: %d\n",
+					mod->name, err);
+				kfree(attr);
+				err = 0;
+				break;
+			}
+
+			btf_mod->sysfs_attr = attr;
+		}
+		break;
+
+	case MODULE_STATE_GOING:
+		mutex_lock(&btf_module_mutex);
+		list_for_each_entry_safe(btf_mod, tmp, &btf_modules, list) {
+			if (btf_mod->module != mod)
+				continue;
+
+			list_del(&btf_mod->list);
+			if (btf_mod->sysfs_attr)
+				sysfs_remove_bin_file(btf_kobj, btf_mod->sysfs_attr);
+			btf_put(btf_mod->btf);
+			kfree(btf_mod->sysfs_attr);
+			kfree(btf_mod);
+			break;
+		}
+		mutex_unlock(&btf_module_mutex);
+		break;
+	}
+out:
+	return notifier_from_errno(err);
+}
+
+static struct notifier_block btf_module_nb = {
+	.notifier_call = btf_module_notify,
+};
+
+static int __init btf_module_init(void)
+{
+	register_module_notifier(&btf_module_nb);
+	return 0;
+}
+
+fs_initcall(btf_module_init);
+#endif /* CONFIG_DEBUG_INFO_BTF_MODULES */
+
+struct module *btf_try_get_module(const struct btf *btf)
+{
+	struct module *res = NULL;
+#ifdef CONFIG_DEBUG_INFO_BTF_MODULES
+	struct btf_module *btf_mod;
+
+	mutex_lock(&btf_module_mutex);
+	list_for_each_entry(btf_mod, &btf_modules, list) {
+		if (btf_mod->btf != btf)
+			continue;
+
+		if (try_module_get(btf_mod->module))
+			res = btf_mod->module;
+		break;
+	}
+	mutex_unlock(&btf_module_mutex);
+#endif
+	return res;
+}
+
 BPF_CALL_4(bpf_btf_find_by_name_kind, char *, name, int, name_sz,
 	   u32, kind, int, flags)
 {
@@ -5833,12 +6085,33 @@ BPF_CALL_4(bpf_btf_find_by_name_kind, char *, name, int, name_sz,
 	if (!btf)
 		return -ENOENT;
 
-	/*
-	 * The 4.19 BTF implementation has no module-BTF registry or module
-	 * lifetime flags. Keep the vmlinux lookup exact and leave module lookup
-	 * for a separate, larger BTF/module adaptation.
-	 */
 	ret = btf_find_by_name_kind(btf, name, kind);
+	if (ret < 0) {
+		struct btf *mod_btf;
+		int id;
+
+		spin_lock_bh(&btf_idr_lock);
+		idr_for_each_entry(&btf_idr, mod_btf, id) {
+			if (!btf_is_module(mod_btf))
+				continue;
+
+			btf_get(mod_btf);
+			spin_unlock_bh(&btf_idr_lock);
+			ret = btf_find_by_name_kind(mod_btf, name, kind);
+			if (ret > 0) {
+				int btf_obj_fd = __btf_new_fd(mod_btf);
+
+				if (btf_obj_fd < 0) {
+					btf_put(mod_btf);
+					return btf_obj_fd;
+				}
+				return ret | (((u64)btf_obj_fd) << 32);
+			}
+			spin_lock_bh(&btf_idr_lock);
+			btf_put(mod_btf);
+		}
+		spin_unlock_bh(&btf_idr_lock);
+	}
 	return ret;
 }
 

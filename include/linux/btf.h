@@ -14,6 +14,7 @@
 struct btf;
 struct btf_member;
 struct btf_type;
+struct module;
 union bpf_attr;
 struct btf_show;
 
@@ -89,11 +90,12 @@ int btf_type_snprintf_show(const struct btf *btf, u32 type_id, void *obj,
 			   char *buf, int len, u64 flags);
 
 int btf_get_fd_by_id(u32 id);
+u32 btf_id(const struct btf *btf);
 u32 btf_obj_id(const struct btf *btf);
+u32 btf_nr_types(const struct btf *btf);
 bool btf_is_kernel(const struct btf *btf);
 bool btf_is_module(const struct btf *btf);
 struct module *btf_try_get_module(const struct btf *btf);
-u32 btf_nr_types(const struct btf *btf);
 bool btf_member_is_reg_int(const struct btf *btf, const struct btf_type *s,
 			   const struct btf_member *m,
 			   u32 expected_offset, u32 expected_size);

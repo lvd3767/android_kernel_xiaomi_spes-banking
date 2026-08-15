@@ -165,6 +165,7 @@ static int btf_parse_type_sec(struct btf *btf, btf_print_fn_t err_log)
 		case BTF_KIND_ENUM:
 			next_type += vlen * sizeof(struct btf_enum);
 			break;
+		case BTF_KIND_FLOAT:
 		case BTF_KIND_TYPEDEF:
 		case BTF_KIND_PTR:
 		case BTF_KIND_FWD:
@@ -211,6 +212,7 @@ static __s64 btf_type_size(const struct btf_type *t)
 	case BTF_KIND_STRUCT:
 	case BTF_KIND_UNION:
 	case BTF_KIND_ENUM:
+	case BTF_KIND_FLOAT:
 		return t->size;
 	case BTF_KIND_PTR:
 		return sizeof(void *);
