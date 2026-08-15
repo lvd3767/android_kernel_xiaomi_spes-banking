@@ -4120,8 +4120,11 @@ static int xdp_do_generic_redirect_map(struct net_device *dev,
 		if (err)
 			goto err;
 		consume_skb(skb);
+	} else if (map->map_type == BPF_MAP_TYPE_CPUMAP) {
+		err = cpu_map_generic_redirect(fwd, skb);
+		if (unlikely(err))
+			goto err;
 	} else {
-		/* TODO: Handle BPF_MAP_TYPE_CPUMAP */
 		err = -EBADRQC;
 		goto err;
 	}
