@@ -5720,7 +5720,7 @@ static struct net_device *__dev_via_ifindex(struct net_device *dev_curr,
 {
 	struct net *netns = dev_net(dev_curr);
 
-	/* Non-redirect use-cases can use ifindex=0 and save ifindex lookup */
+	/* Non-redirect use cases can use ifindex 0 and avoid a lookup. */
 	if (ifindex == 0)
 		return dev_curr;
 
@@ -5735,7 +5735,7 @@ BPF_CALL_5(bpf_skb_check_mtu, struct sk_buff *, skb,
 	int skb_len, dev_len;
 	int mtu;
 
-	if (unlikely(flags & ~(BPF_MTU_CHK_SEGS)))
+	if (unlikely(flags & ~BPF_MTU_CHK_SEGS))
 		return -EINVAL;
 
 	if (unlikely(flags & BPF_MTU_CHK_SEGS && (len_diff || *mtu_len)))
@@ -5746,33 +5746,26 @@ BPF_CALL_5(bpf_skb_check_mtu, struct sk_buff *, skb,
 		return -ENODEV;
 
 	mtu = READ_ONCE(dev->mtu);
-
 	dev_len = mtu + dev->hard_header_len;
 
-	/* If set use *mtu_len as input, L3 as iph->tot_len (like fib_lookup) */
+	/* A non-zero input is an L3 length, like bpf_fib_lookup(). */
 	skb_len = *mtu_len ? *mtu_len + dev->hard_header_len : skb->len;
-
-	skb_len += len_diff; /* minus result pass check */
+	skb_len += len_diff;
 	if (skb_len <= dev_len) {
 		ret = BPF_MTU_CHK_RET_SUCCESS;
 		goto out;
 	}
-	/* At this point, skb->len exceed MTU, but as it include length of all
-	 * segments, it can still be below MTU.  The SKB can possibly get
-	 * re-segmented in transmit path (see validate_xmit_skb).  Thus, user
-	 * must choose if segs are to be MTU checked.
-	 */
+
+	/* skb->len may include GSO segments that will be re-segmented later. */
 	if (skb_is_gso(skb)) {
 		ret = BPF_MTU_CHK_RET_SUCCESS;
-
-		if (flags & BPF_MTU_CHK_SEGS &&
+		if ((flags & BPF_MTU_CHK_SEGS) &&
 		    !skb_gso_validate_network_len(skb, mtu))
 			ret = BPF_MTU_CHK_RET_SEGS_TOOBIG;
 	}
 out:
-	/* BPF verifier guarantees valid pointer */
+	/* The verifier guarantees that mtu_len is a valid writable pointer. */
 	*mtu_len = mtu;
-
 	return ret;
 }
 
@@ -5784,7 +5777,7 @@ BPF_CALL_5(bpf_xdp_check_mtu, struct xdp_buff *, xdp,
 	int ret = BPF_MTU_CHK_RET_SUCCESS;
 	int mtu, dev_len;
 
-	/* XDP variant doesn't support multi-buffer segment check (yet) */
+	/* XDP does not support the multi-buffer segment check yet. */
 	if (unlikely(flags))
 		return -EINVAL;
 
@@ -5793,21 +5786,17 @@ BPF_CALL_5(bpf_xdp_check_mtu, struct xdp_buff *, xdp,
 		return -ENODEV;
 
 	mtu = READ_ONCE(dev->mtu);
-
-	/* Add L2-header as dev MTU is L3 size */
 	dev_len = mtu + dev->hard_header_len;
 
-	/* Use *mtu_len as input, L3 as iph->tot_len (like fib_lookup) */
+	/* A non-zero input is an L3 length, like bpf_fib_lookup(). */
 	if (*mtu_len)
 		xdp_len = *mtu_len + dev->hard_header_len;
-
-	xdp_len += len_diff; /* minus result pass check */
+	xdp_len += len_diff;
 	if (xdp_len > dev_len)
 		ret = BPF_MTU_CHK_RET_FRAG_NEEDED;
 
-	/* BPF verifier guarantees valid pointer */
+	/* The verifier guarantees that mtu_len is a valid writable pointer. */
 	*mtu_len = mtu;
-
 	return ret;
 }
 
@@ -5815,22 +5804,22 @@ static const struct bpf_func_proto bpf_skb_check_mtu_proto = {
 	.func		= bpf_skb_check_mtu,
 	.gpl_only	= true,
 	.ret_type	= RET_INTEGER,
-	.arg1_type      = ARG_PTR_TO_CTX,
-	.arg2_type      = ARG_ANYTHING,
-	.arg3_type      = ARG_PTR_TO_INT,
-	.arg4_type      = ARG_ANYTHING,
-	.arg5_type      = ARG_ANYTHING,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+	.arg3_type	= ARG_PTR_TO_INT,
+	.arg4_type	= ARG_ANYTHING,
+	.arg5_type	= ARG_ANYTHING,
 };
 
 static const struct bpf_func_proto bpf_xdp_check_mtu_proto = {
 	.func		= bpf_xdp_check_mtu,
 	.gpl_only	= true,
 	.ret_type	= RET_INTEGER,
-	.arg1_type      = ARG_PTR_TO_CTX,
-	.arg2_type      = ARG_ANYTHING,
-	.arg3_type      = ARG_PTR_TO_INT,
-	.arg4_type      = ARG_ANYTHING,
-	.arg5_type      = ARG_ANYTHING,
+	.arg1_type	= ARG_PTR_TO_CTX,
+	.arg2_type	= ARG_ANYTHING,
+	.arg3_type	= ARG_PTR_TO_INT,
+	.arg4_type	= ARG_ANYTHING,
+	.arg5_type	= ARG_ANYTHING,
 };
 
 #if IS_ENABLED(CONFIG_IPV6_SEG6_BPF)
