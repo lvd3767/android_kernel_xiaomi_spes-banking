@@ -3826,111 +3826,18 @@ union bpf_attr {
  *	Return
  *		Pointer to the current task.
  *
- * long bpf_bprm_opts_set(struct linux_binprm *bprm, u64 flags)
+ * u64 bpf_get_func_ip(void *ctx)
  *	Description
- *		Set or clear certain options on *bprm*:
- *
- *		**BPF_F_BPRM_SECUREEXEC** Set the secureexec bit
- *		which sets the **AT_SECURE** auxv for glibc. The bit
- *		is cleared if the flag is not specified.
+ *		Get address of the traced function (for tracing and kprobe programs).
  *	Return
- *		**-EINVAL** if invalid *flags* are passed, zero otherwise.
+ *		Address of the traced function.
  *
- * u64 bpf_ktime_get_coarse_ns(void)
- * 	Description
- * 		Return a coarse-grained version of the time elapsed since
- * 		system boot, in nanoseconds. Does not include time the system
- * 		was suspended.
- *
- * 		See: **clock_gettime**\ (**CLOCK_MONOTONIC_COARSE**)
- * 	Return
- * 		Current *ktime*.
- *
- * long bpf_ima_inode_hash(struct inode *inode, void *dst, u32 size)
+ * long bpf_task_pt_regs(struct task_struct *task)
  *	Description
- *		Returns the stored IMA hash of the *inode* (if it's avaialable).
- *		If the hash is larger than *size*, then only *size*
- *		bytes will be copied to *dst*
+ *		Get the struct pt_regs associated with **task**.
  *	Return
- *		The **hash_algo** is returned on success,
- *		**-EOPNOTSUP** if IMA is disabled or **-EINVAL** if
- *		invalid arguments are passed.
- *
- * struct socket *bpf_sock_from_file(struct file *file)
- *	Description
- *		If the given file represents a socket, returns the associated
- *		socket.
- *	Return
- *		A pointer to a struct socket on success or NULL if the file is
- *		not a socket.
- *
- * long bpf_check_mtu(void *ctx, u32 ifindex, u32 *mtu_len, s32 len_diff, u64 flags)
- *	Description
- *		Check packet size against exceeding MTU of net device (based
- *		on *ifindex*).  This helper will likely be used in combination
- *		with helpers that adjust/change the packet size.
- *
- *		The argument *len_diff* can be used for querying with a planned
- *		size change. This allows to check MTU prior to changing packet
- *		ctx. Providing an *len_diff* adjustment that is larger than the
- *		actual packet size (resulting in negative packet size) will in
- *		principle not exceed the MTU, why it is not considered a
- *		failure.  Other BPF-helpers are needed for performing the
- *		planned size change, why the responsability for catch a negative
- *		packet size belong in those helpers.
- *
- *		Specifying *ifindex* zero means the MTU check is performed
- *		against the current net device.  This is practical if this isn't
- *		used prior to redirect.
- *
- *		On input *mtu_len* must be a valid pointer, else verifier will
- *		reject BPF program.  If the value *mtu_len* is initialized to
- *		zero then the ctx packet size is use.  When value *mtu_len* is
- *		provided as input this specify the L3 length that the MTU check
- *		is done against. Remember XDP and TC length operate at L2, but
- *		this value is L3 as this correlate to MTU and IP-header tot_len
- *		values which are L3 (similar behavior as bpf_fib_lookup).
- *
- *		The Linux kernel route table can configure MTUs on a more
- *		specific per route level, which is not provided by this helper.
- *		For route level MTU checks use the **bpf_fib_lookup**\ ()
- *		helper.
- *
- *		*ctx* is either **struct xdp_md** for XDP programs or
- *		**struct sk_buff** for tc cls_act programs.
- *
- *		The *flags* argument can be a combination of one or more of the
- *		following values:
- *
- *		**BPF_MTU_CHK_SEGS**
- *			This flag will only works for *ctx* **struct sk_buff**.
- *			If packet context contains extra packet segment buffers
- *			(often knows as GSO skb), then MTU check is harder to
- *			check at this point, because in transmit path it is
- *			possible for the skb packet to get re-segmented
- *			(depending on net device features).  This could still be
- *			a MTU violation, so this flag enables performing MTU
- *			check against segments, with a different violation
- *			return code to tell it apart. Check cannot use len_diff.
- *
- *		On return *mtu_len* pointer contains the MTU value of the net
- *		device.  Remember the net device configured MTU is the L3 size,
- *		which is returned here and XDP and TC length operate at L2.
- *		Helper take this into account for you, but remember when using
- *		MTU value in your BPF-code.
- *
- *	Return
- *		* 0 on success, and populate MTU value in *mtu_len* pointer.
- *
- *		* < 0 if any input argument is invalid (*mtu_len* not updated)
- *
- *		MTU violations return positive values, but also populate MTU
- *		value in *mtu_len* pointer, as this can be needed for
- *		implementing PMTU handing:
- *
- *		* **BPF_MTU_CHK_RET_FRAG_NEEDED**
- *		* **BPF_MTU_CHK_RET_SEGS_TOOBIG**
- *
+ *		A pointer to struct pt_regs.
+>>>>>>> 155e3586506c (BACKPORT: bpf: add tracing IP and task-register helpers)
  */
 #define __BPF_FUNC_MAPPER(FN)		\
 	FN(unspec),			\
