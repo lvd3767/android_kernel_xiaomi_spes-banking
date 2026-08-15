@@ -248,6 +248,10 @@ enum bpf_attach_type {
 	BPF_XDP_CPUMAP,
 	BPF_SK_LOOKUP,
 	BPF_XDP,
+	BPF_SK_SKB_VERDICT,
+	BPF_SK_REUSEPORT_SELECT,
+	BPF_SK_REUSEPORT_SELECT_OR_MIGRATE,
+	BPF_PERF_EVENT,
 	__MAX_BPF_ATTACH_TYPE
 };
 
@@ -261,6 +265,7 @@ enum bpf_link_type {
 	BPF_LINK_TYPE_ITER = 4,
 	BPF_LINK_TYPE_NETNS = 5,
 	BPF_LINK_TYPE_XDP = 6,
+	BPF_LINK_TYPE_PERF_EVENT = 7,
 
 	MAX_BPF_LINK_TYPE,
 };
@@ -691,6 +696,10 @@ union bpf_attr {
 				__aligned_u64	iter_info;	/* extra bpf_iter_link_info */
 				__u32		iter_info_len;	/* iter_info length */
 			};
+			struct {
+				/* user-provided value passed to the BPF program */
+				__u64		bpf_cookie;
+			} perf_event;
 		};
 	} link_create;
 
@@ -3831,6 +3840,14 @@ union bpf_attr {
  *		Get address of the traced function (for tracing and kprobe programs).
  *	Return
  *		Address of the traced function.
+ *
+ * u64 bpf_get_attach_cookie(void *ctx)
+ *	Description
+ *		Get the user-provided bpf_cookie associated with this attachment.
+ *		The value can be different for each attachment of the same program.
+ *		Supported for kprobe/uprobe, tracepoint, and perf_event programs.
+ *	Return
+ *		The attachment cookie, or 0 if none was specified.
  *
  * long bpf_task_pt_regs(struct task_struct *task)
  *	Description

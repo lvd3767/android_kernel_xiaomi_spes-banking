@@ -2136,6 +2136,7 @@ int bpf_prog_array_update_at(struct bpf_prog_array *array, int index,
 int bpf_prog_array_copy(struct bpf_prog_array *old_array,
 			struct bpf_prog *exclude_prog,
 			struct bpf_prog *include_prog,
+			u64 bpf_cookie,
 			struct bpf_prog_array **new_array)
 {
 	int new_prog_cnt, carry_prog_cnt = 0;
@@ -2188,10 +2189,15 @@ int bpf_prog_array_copy(struct bpf_prog_array *old_array,
 			    existing->prog != &dummy_bpf_prog.prog) {
 				array->items[new_prog_idx++].prog =
 					existing->prog;
+				array->items[new_prog_idx - 1].bpf_cookie =
+					existing->bpf_cookie;
 			}
 	}
-	if (include_prog)
-		array->items[new_prog_idx++].prog = include_prog;
+	if (include_prog) {
+		array->items[new_prog_idx].prog = include_prog;
+		array->items[new_prog_idx].bpf_cookie = bpf_cookie;
+		new_prog_idx++;
+	}
 	array->items[new_prog_idx].prog = NULL;
 	*new_array = array;
 	return 0;

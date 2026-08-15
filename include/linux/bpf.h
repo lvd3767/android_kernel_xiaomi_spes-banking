@@ -21,8 +21,7 @@
 #include <linux/capability.h>
 #include <linux/percpu-refcount.h>
 #include <linux/android_kabi.h>
-#include <linux/sched/mm.h>
-#include <linux/slab.h>
+#include <linux/sched.h>
 
 struct bpf_verifier_env;
 struct bpf_verifier_log;
@@ -1117,7 +1116,10 @@ u64 bpf_event_output(struct bpf_map *map, u64 flags, void *meta, u64 meta_size,
  */
 struct bpf_prog_array_item {
 	struct bpf_prog *prog;
-	struct bpf_cgroup_storage *cgroup_storage[MAX_BPF_CGROUP_STORAGE_TYPE];
+	union {
+		struct bpf_cgroup_storage *cgroup_storage[MAX_BPF_CGROUP_STORAGE_TYPE];
+		u64 bpf_cookie;
+	};
 };
 
 struct bpf_prog_array {
@@ -1143,37 +1145,33 @@ int bpf_prog_array_copy_info(struct bpf_prog_array *array,
 int bpf_prog_array_copy(struct bpf_prog_array *old_array,
 			struct bpf_prog *exclude_prog,
 			struct bpf_prog *include_prog,
+			u64 bpf_cookie,
 			struct bpf_prog_array **new_array);
 
-/* BPF program asks to bypass CAP_NET_BIND_SERVICE in bind. */
-#define BPF_RET_BIND_NO_CAP_NET_BIND_SERVICE			(1 << 0)
-/* BPF program asks to set CN on the packet. */
-#define BPF_RET_SET_CN						(1 << 0)
+struct bpf_run_ctx {};
 
-#define BPF_PROG_RUN_ARRAY_FLAGS(array, ctx, func, ret_flags)		\
-	({								\
-		struct bpf_prog_array_item *_item;			\
-		struct bpf_prog *_prog;					\
-		struct bpf_prog_array *_array;				\
-		u32 _ret = 1;						\
-		u32 func_ret;						\
-		migrate_disable();					\
-		rcu_read_lock();					\
-		_array = rcu_dereference(array);			\
-		_item = &_array->items[0];				\
-		while ((_prog = READ_ONCE(_item->prog))) {		\
-			if (unlikely(bpf_cgroup_storage_set(_item->cgroup_storage)))	\
-				break;					\
-			func_ret = func(_prog, ctx);			\
-			_ret &= (func_ret & 1);				\
-			*(ret_flags) |= (func_ret >> 1);			\
-			bpf_cgroup_storage_unset();			\
-			_item++;					\
-		}							\
-		rcu_read_unlock();					\
-		migrate_enable();					\
-		_ret;							\
-	 })
+struct bpf_trace_run_ctx {
+	struct bpf_run_ctx run_ctx;
+	u64 bpf_cookie;
+};
+
+static inline struct bpf_run_ctx *bpf_set_run_ctx(struct bpf_run_ctx *new_ctx)
+{
+	struct bpf_run_ctx *old_ctx = NULL;
+
+#ifdef CONFIG_BPF_SYSCALL
+	old_ctx = current->bpf_ctx;
+	current->bpf_ctx = new_ctx;
+#endif
+	return old_ctx;
+}
+
+static inline void bpf_reset_run_ctx(struct bpf_run_ctx *old_ctx)
+{
+#ifdef CONFIG_BPF_SYSCALL
+	current->bpf_ctx = old_ctx;
+#endif
+}
 
 #define __BPF_PROG_RUN_ARRAY(array, ctx, func, check_non_null, set_cg_storage) \
 	({						\
@@ -1243,8 +1241,35 @@ _out:							\
 #define BPF_PROG_RUN_ARRAY(array, ctx, func)		\
 	__BPF_PROG_RUN_ARRAY(array, ctx, func, false, true)
 
+#define __BPF_PROG_RUN_ARRAY_TRACE(array, ctx, func)	\
+	({						\
+		struct bpf_prog_array_item *_item;	\
+		struct bpf_prog *_prog;			\
+		struct bpf_prog_array *_array;		\
+		struct bpf_trace_run_ctx _run_ctx;	\
+		struct bpf_run_ctx *_old_run_ctx;	\
+		u32 _ret = 1;				\
+		migrate_disable();			\
+		rcu_read_lock();			\
+		_array = rcu_dereference(array);	\
+		if (unlikely(!_array))			\
+			goto _out_trace;			\
+		_old_run_ctx = bpf_set_run_ctx(&_run_ctx.run_ctx);\
+		_item = &_array->items[0];			\
+		while ((_prog = READ_ONCE(_item->prog))) {	\
+			_run_ctx.bpf_cookie = _item->bpf_cookie;\
+			_ret &= func(_prog, ctx);			\
+			_item++;					\
+		}					\
+		bpf_reset_run_ctx(_old_run_ctx);		\
+_out_trace:						\
+		rcu_read_unlock();				\
+		migrate_enable();				\
+		_ret;					\
+	 })
+
 #define BPF_PROG_RUN_ARRAY_CHECK(array, ctx, func)	\
-	__BPF_PROG_RUN_ARRAY(array, ctx, func, true, false)
+	__BPF_PROG_RUN_ARRAY_TRACE(array, ctx, func)
 
 #ifdef CONFIG_BPF_SYSCALL
 DECLARE_PER_CPU(int, bpf_prog_active);
