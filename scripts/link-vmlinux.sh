@@ -193,7 +193,10 @@ gen_btf()
 
 	info "BTF" ${2}
 	vmlinux_link ${1}
-	LLVM_OBJCOPY=${OBJCOPY} ${PAHOLE} -J ${1}
+	# Keep the embedded BTF within the feature set understood by this
+	# 5.15-compatible parser.  Newer pahole defaults also emit enum64 and enum
+	# signedness flags, which are not part of the backported kernel ABI.
+	LLVM_OBJCOPY=${OBJCOPY} ${PAHOLE} --btf_features=var,float -J ${1}
 
 	# Create ${2} which contains just .BTF section but no symbols. Add
 	# SHF_ALLOC because .BTF will be part of the vmlinux image. --strip-all
