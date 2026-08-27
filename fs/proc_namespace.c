@@ -1,3 +1,6 @@
+#ifdef CONFIG_NOMOUNT
+#include <linux/nomount.h>
+#endif
 // SPDX-License-Identifier: GPL-2.0
 /*
  * fs/proc_namespace.c - handling of /proc/<pid>/{mounts,mountinfo,mountstats}

@@ -128,6 +128,7 @@ menu "Caches"
 source "fs/fscache/Kconfig"
 source "fs/cachefiles/Kconfig"
 
+source "fs/nomount/Kconfig"
 endmenu
 
 if BLOCK
