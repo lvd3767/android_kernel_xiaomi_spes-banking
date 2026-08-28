@@ -10,6 +10,7 @@
 # Normal rules (sorted alphabetically)
 #
 .*
+!.gitmodules
 *.a
 *.asn1.[ch]
 *.bin
