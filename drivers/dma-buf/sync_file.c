@@ -228,7 +228,8 @@ static struct sync_file *sync_file_merge(struct sync_file *a,
 
 			i_b++;
 		} else {
-			if (pt_a->seqno - pt_b->seqno <= INT_MAX)
+			if (__dma_fence_is_later(pt_a->seqno, pt_b->seqno,
+						 pt_a->ops))
 				add_fence(fences, &i, pt_a);
 			else
 				add_fence(fences, &i, pt_b);
@@ -395,7 +396,7 @@ static long sync_file_ioctl_fence_info(struct sync_file *sync_file,
 	 * info->num_fences.
 	 */
 	if (!info.num_fences) {
-		info.status = dma_fence_is_signaled(sync_file->fence);
+		info.status = dma_fence_get_status(sync_file->fence);
 		goto no_fences;
 	} else {
 		info.status = 1;

@@ -233,7 +233,7 @@ static void force_shm_swapin_readahead(struct vm_area_struct *vma,
 		index = ((start - vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
 
 		page = find_get_entry(mapping, index);
-		if (!radix_tree_exceptional_entry(page)) {
+		if (!xa_is_value(page)) {
 			if (page)
 				put_page(page);
 			continue;
@@ -1190,6 +1190,7 @@ SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
 	struct task_struct *task;
 	struct mm_struct *mm;
 	size_t total_len;
+	unsigned int f_flags;
 
 	if (flags != 0) {
 		ret = -EINVAL;
@@ -1200,10 +1201,15 @@ SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
 	if (ret < 0)
 		goto out;
 
-	pid = pidfd_get_pid(pidfd);
+	pid = pidfd_get_pid(pidfd, &f_flags);
 	if (IS_ERR(pid)) {
 		ret = PTR_ERR(pid);
 		goto free_iov;
+	}
+
+	if (f_flags) {
+		ret = -EBADF;
+		goto put_pid;
 	}
 
 	task = get_pid_task(pid, PIDTYPE_PID);

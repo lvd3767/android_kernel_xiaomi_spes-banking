@@ -4551,6 +4551,13 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		       panel->name, rc);
 	else
 		panel->panel_initialized = true;
+
+	if (panel->cur_mode && panel->cur_mode->timing.refresh_rate == 90) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_BC_90HZ);
+		if (rc)
+			DSI_ERR("[%s][%s] failed to send DSI_CMD_SET_DISP_BC_90HZ cmd, rc=%d\n",
+					__func__, panel->name, rc);
+	}
 	mutex_unlock(&panel->panel_lock);
 
 	if (panel->hbm_mode)
