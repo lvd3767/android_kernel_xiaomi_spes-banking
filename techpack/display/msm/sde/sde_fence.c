@@ -89,6 +89,22 @@ struct sde_fence {
 	int fd;
 };
 
+static struct kmem_cache *sde_fence_cache;
+
+int sde_fence_cache_init(void)
+{
+	sde_fence_cache = KMEM_CACHE(sde_fence, SLAB_HWCACHE_ALIGN);
+	if (!sde_fence_cache)
+		return -ENOMEM;
+
+	return 0;
+}
+
+void sde_fence_cache_destroy(void)
+{
+	kmem_cache_destroy(sde_fence_cache);
+}
+
 static void sde_fence_destroy(struct kref *kref)
 {
 	struct sde_fence_context *ctx;
@@ -144,7 +160,7 @@ static void sde_fence_release(struct dma_fence *fence)
 	if (fence) {
 		f = to_sde_fence(fence);
 		kref_put(&f->ctx->kref, sde_fence_destroy);
-		kfree(f);
+		kmem_cache_free(sde_fence_cache, f);
 	}
 }
 
@@ -197,7 +213,7 @@ static int _sde_fence_create_fd(void *fence_ctx, uint32_t val)
 		goto exit;
 	}
 
-	sde_fence = kzalloc(sizeof(*sde_fence), GFP_KERNEL);
+	sde_fence = kmem_cache_zalloc(sde_fence_cache, GFP_KERNEL);
 	if (!sde_fence)
 		return -ENOMEM;
 

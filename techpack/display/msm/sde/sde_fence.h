@@ -233,4 +233,7 @@ void sde_fence_list_dump(struct dma_fence *fence, struct seq_file **s)
 
 #endif /* IS_ENABLED(CONFIG_SW_SYNC) */
 
+int sde_fence_cache_init(void);
+void sde_fence_cache_destroy(void);
+
 #endif /* _SDE_FENCE_H_ */
