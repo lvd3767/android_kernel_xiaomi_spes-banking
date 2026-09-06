@@ -45,9 +45,16 @@
 #endif
 
 #ifdef CONFIG_KSU_SUSFS
+#include <linux/jump_label.h>
 extern u32 susfs_ksu_sid;
 extern u32 susfs_priv_app_sid;
-bool susfs_is_avc_log_spoofing_enabled = false;
+/*
+ * susfs 2.2.0: this used to be a plain bool DEFINED in this file. It is
+ * now a jump-label static key DEFINED in drivers/kernelsu/susfs/susfs.c
+ * (DEFINE_STATIC_KEY_FALSE) - defining it again here caused a duplicate
+ * symbol at link time. Only declare it extern here.
+ */
+extern struct static_key_false susfs_is_avc_log_spoofing_enabled;
 #endif
 
 struct avc_entry {
@@ -194,7 +201,7 @@ static void avc_dump_query(struct audit_buffer *ab, struct selinux_state *state,
 
 	rc = security_sid_to_context(state, tsid, &scontext, &scontext_len);
 #ifdef CONFIG_KSU_SUSFS
-	if (unlikely(tsid == susfs_ksu_sid && susfs_is_avc_log_spoofing_enabled)) {
+	if (unlikely(tsid == susfs_ksu_sid && static_branch_unlikely(&susfs_is_avc_log_spoofing_enabled))) {
 		if (rc)
 			audit_log_format(ab, " tsid=%d", susfs_priv_app_sid);
 		else
