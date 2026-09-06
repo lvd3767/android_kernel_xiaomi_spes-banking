@@ -1,0 +1,197 @@
+  GEN     ./Makefile
+  Using .. as source for kernel
+  CC      kernel/bounds.s
+  CC      arch/arm64/kernel/asm-offsets.s
+  CALL    ../scripts/checksyscalls.sh
+  LDS     arch/arm64/kernel/vdso/vdso.lds
+  CC      arch/arm64/kernel/vdso/vgettimeofday.o
+  AS      arch/arm64/kernel/vdso/note.o
+  AS      arch/arm64/kernel/vdso/sigreturn.o
+  LD      arch/arm64/kernel/vdso/vdso.so.dbg
+  VDSOSYM include/generated/vdso-offsets.h
+  LDS     arch/arm64/kernel/vdso32/vdso.lds
+  CC32    arch/arm64/kernel/vdso32/note.o
+  CC32    arch/arm64/kernel/vdso32/vgettimeofday.o
+  AS32    arch/arm64/kernel/vdso32/sigreturn.o
+  HOSTCC  arch/arm64/kernel/vdso32/../../../arm/vdso/vdsomunge
+  LD32    arch/arm64/kernel/vdso32/vdso.so.raw
+  MUNGE   arch/arm64/kernel/vdso32/vdso.so.dbg
+  VDSOSYM include/generated/vdso32-offsets.h
+  CHK     include/generated/compile.h
+  CC      arch/arm64/kernel/signal.o
+  CC      arch/arm64/kernel/vdso.o
+  CC      arch/arm64/kernel/signal32.o
+  SHIPPED arch/arm64/crypto/sha256-core.S
+  SHIPPED arch/arm64/crypto/poly1305-core.S
+  AS      arch/arm64/crypto/sha256-core.o
+  AS      arch/arm64/crypto/poly1305-core.o
+  OBJCOPY arch/arm64/kernel/vdso/vdso.so
+  AS      arch/arm64/kernel/vdso/vdso.o
+  AR      arch/arm64/kernel/vdso/built-in.a
+  EXTRACT_CERTS   
+  AR      arch/arm64/crypto/built-in.a
+  AS      certs/system_certificates.o
+  AS      arch/arm64/kernel/head.o
+  LDS     arch/arm64/kernel/vmlinux.lds
+  AR      certs/built-in.a
+../arch/arm64/kernel/head.S:73:2: warning: DWARF2 only supports one section per compilation unit
+ .section ".head.text","ax"
+ ^
+../arch/arm64/kernel/head.S:105:2: warning: DWARF2 only supports one section per compilation unit
+ .section ".init.text","ax"
+ ^
+../arch/arm64/kernel/head.S:466:2: warning: DWARF2 only supports one section per compilation unit
+ .section ".idmap.text","awx"
+ ^
+  OBJCOPY arch/arm64/kernel/vdso32/vdso.so
+  AS      arch/arm64/kernel/vdso32/vdso.o
+  AR      arch/arm64/kernel/vdso32/built-in.a
+  CHK     kernel/kheaders_data.tar.xz
+  AR      arch/arm64/kernel/built-in.a
+  GEN     kernel/kheaders_data.tar.xz
+  CC      fs/proc/cmdline.o
+  AR      fs/proc/built-in.a
+  AR      fs/built-in.a
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-1gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot.dtb
+../drivers/kernelsu/Kbuild:99: "KSU_GIT_VERSION not defined! It is better to make KernelSU-Next a git repository!"
+-- KernelSU-Next version fallback: 33214-2
+../drivers/kernelsu/Kbuild:110: "KSU_VERSION_TAG not defined! It is better to make KernelSU-Next a git submodule!"
+-- KernelSU-Next tag fallback: v3.3.0
+-- KernelSU-Next Manager signature size: 0x3e6
+-- KernelSU-Next Manager signature hash: 79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7
+-- KernelSU-Next: Hook mode: Manual
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot-2gb.dtb
+
+-- SUSFS_VERSION: v2.2.0
+-- KernelSU-Next SUSFS source: ../drivers/kernelsu/susfs/
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot.dtb
+-- KSU_NEXT SUSFS: adding susfs_cmdline_hook call to ../fs/proc/cmdline.c
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje.dtb
+  CC      drivers/kernelsu/core/init.o
+  CC      drivers/kernelsu/compat/kernel_compat.o
+  CC      drivers/kernelsu/feature/kernel_umount.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba.dtb
+  CC      drivers/kernelsu/feature/sulog.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap.dtb
+  CC      drivers/kernelsu/feature/sucompat.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-2gb.dtb
+  CC      drivers/kernelsu/hook/hook_manager.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot.dtb
+  CC      drivers/kernelsu/hook/lsm_hooks.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-2gb.dtb
+  CC      drivers/kernelsu/hook/setuid_hook.o
+  CC      drivers/kernelsu/extras.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot.dtb
+  CC      drivers/kernelsu/infra/file_wrapper.o
+  CC      drivers/kernelsu/infra/event_queue.o
+  CC      drivers/kernelsu/infra/seccomp_cache.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot-idp.dtb
+  CC      drivers/kernelsu/infra/su_mount_ns.o
+  CC      drivers/kernelsu/manager/apk_sign.o
+  CC      drivers/kernelsu/manager/throne_tracker.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot-idp-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-idp-usbc-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-qrd-eldo-overlay.dtbo
+  CC      drivers/kernelsu/manager/pkg_observer.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-qrd-non-eldo-overlay.dtbo
+  CC      drivers/kernelsu/policy/allowlist.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot-2gb.dtb
+  CC      drivers/kernelsu/policy/app_profile.o
+  CC      drivers/kernelsu/policy/feature.o
+  CC      drivers/kernelsu/runtime/boot_event.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-qrd-eldo-overlay.dtbo
+  CC      drivers/kernelsu/runtime/ksud_integration.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-qrd-non-eldo-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-rumi-overlay.dtbo
+  CC      drivers/kernelsu/selinux/selinux.o
+  CC      drivers/kernelsu/selinux/rules.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/spes-khaje-idp-nopmi-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/spes-sm5602-khaje-idp-nopmi-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/spesn-khaje-idp-nopmi-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-1gb-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-2gb-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-nopmi-overlay.dtbo
+  CC      drivers/kernelsu/selinux/sepolicy.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-usbc-1gb-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-usbc-2gb-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-idp-usbc-overlay.dtbo
+  CC      drivers/kernelsu/sulog/event.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot-idp-2gb-overlay.dtbo
+  CC      drivers/kernelsu/sulog/fd.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot-idp-overlay.dtbo
+  CC      drivers/kernelsu/supercall/dispatch.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot-idp-usbc-2gb-overlay.dtbo
+  CC      drivers/kernelsu/supercall/perm.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot-idp-usbc-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-qrd-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-rumi-overlay.dtbo
+  CC      drivers/kernelsu/supercall/supercall.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-idp-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot-idp-2gb-overlay.dtbo
+  CC      drivers/kernelsu/feature/adb_root.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot-idp-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot-idp-usbc-2gb-overlay.dtbo
+  CC      drivers/kernelsu/feature/selinux_hide.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot-idp-usbc-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-atp-overlay.dtbo
+  CC      drivers/kernelsu/susfs/susfs.o
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-idp-nopmi-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-idp-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-idp-pm8010-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-idp-usbc-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-idps-display-90hz-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-qrd-hvdcp3p5-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-qrd-nopmi-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-qrd-nowcd9375-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje-qrd-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-idp-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-idp-usbc-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-idp-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-rb1-overlay.dtbo
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubalite-iot-idp-overlay.dtbo
+  DTBOIMG arch/arm64/boot/dtbo.img
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot-idp-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/khaje.dtb
+  AR      drivers/kernelsu/built-in.a
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba-iot-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap-iot-idp.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-iot.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot-2gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengalp-iot.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scuba.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/bengal-1gb.dtb
+  DTC     arch/arm64/boot/dts/vendor/qcom/scubap.dtb
+  CAT     arch/arm64/boot/dtb.img
+  AR      drivers/built-in.a
+  CC      kernel/kheaders.o
+  AR      kernel/built-in.a
+  GEN     .version
+  CHK     include/generated/compile.h
+  UPD     include/generated/compile.h
+  CC      init/version.o
+  AR      init/built-in.a
+  AR      built-in.a
+  MODPOST vmlinux.o
+  KSYM    .tmp_kallsyms1.o
+  KSYM    .tmp_kallsyms2.o
+  LD      vmlinux
+  SORTEX  vmlinux
+  SYSMAP  System.map
+  OBJCOPY arch/arm64/boot/Image
+  Building modules, stage 2.
+  MODPOST 2 modules
+  GZIP    arch/arm64/boot/Image.gz
