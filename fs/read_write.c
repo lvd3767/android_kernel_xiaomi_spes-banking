@@ -434,19 +434,16 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 }
 EXPORT_SYMBOL(kernel_read);
 
-#ifdef CONFIG_KSU
-extern bool ksu_vfs_read_hook __read_mostly;
-extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
-			size_t *count_ptr, loff_t **pos);
-#endif
+/*
+ * susfs/KSU-Next 2.2.0 migration note: ksu_handle_vfs_read() no longer
+ * exists in the Youffx legacy-susfs fork - there is no vfs_read-level
+ * hook anymore. The only remaining read hook is ksu_handle_sys_read()
+ * at the ksys_read() syscall level below, repurposed for init.rc
+ * detection rather than generic buffer inspection.
+ */
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
-#ifdef CONFIG_KSU
-	if (unlikely(ksu_vfs_read_hook))
-		ksu_handle_vfs_read(&file, &buf, &count, &pos);
-#endif
-
 
 	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
@@ -583,8 +580,9 @@ static inline void file_pos_write(struct file *file, loff_t pos)
 
 #if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
 extern bool ksu_vfs_read_hook __read_mostly;
-extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
-			       size_t *count_ptr);
+/* susfs 2.2.0: signature simplified to just (fd) - now used for init.rc
+ * detection via fget(fd), not generic buffer inspection. */
+extern void ksu_handle_sys_read(unsigned int fd);
 #endif
 
 ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
@@ -596,7 +594,7 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 		loff_t pos = file_pos_read(f.file);
 #if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
 		if (unlikely(ksu_vfs_read_hook))
-			ksu_handle_sys_read(fd, &buf, &count);
+			ksu_handle_sys_read(fd);
 #endif
 		ret = vfs_read(f.file, buf, count, &pos);
 		if (ret >= 0)

@@ -3826,8 +3826,15 @@ static struct file *path_openat(struct nameidata *nd,
 }
 
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-extern struct filename* susfs_get_redirected_path(unsigned long ino);
-struct inode *inode;
+/*
+ * susfs 2.2.0: susfs_get_redirected_path(ino) replaced by
+ * susfs_open_redirect_spoof_do_sys_openat(inode). The uid-based access
+ * control (old hardcoded "current_uid().val < 11000") is now configured
+ * per-entry from userspace (uid_scheme) and handled internally by the
+ * function itself, so the caller no longer applies its own uid check.
+ * It also returns NULL (not ERR_PTR) when there is no match.
+ */
+extern struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
 #endif
 
 struct file *do_filp_open(int dfd, struct filename *pathname,
@@ -3847,9 +3854,9 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	if (unlikely(filp == ERR_PTR(-ESTALE)))
 		filp = path_openat(&nd, op, flags | LOOKUP_REVAL);
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-	if (!IS_ERR(filp) && unlikely(filp->f_inode->i_state & BIT_OPEN_REDIRECT) && current_uid().val < 11000) {
-		fake_pathname = susfs_get_redirected_path(filp->f_inode->i_ino);
-		if (!IS_ERR(fake_pathname)) {
+	if (!IS_ERR(filp) && unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &filp->f_inode->i_state))) {
+		fake_pathname = susfs_open_redirect_spoof_do_sys_openat(filp->f_inode);
+		if (fake_pathname && !IS_ERR(fake_pathname)) {
 			restore_nameidata();
 			filp_close(filp, NULL);
 			// no need to do `putname(pathname);` here as it will be done by calling process

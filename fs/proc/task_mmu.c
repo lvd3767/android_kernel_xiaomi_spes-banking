@@ -31,7 +31,7 @@
 #include "internal.h"
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
+extern void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
 #endif
 
 #define SEQ_PUT_DEC(str, val) \
@@ -513,7 +513,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		if (unlikely(inode->i_state & BIT_SUS_MAPS) && susfs_is_current_proc_umounted()) {
+		if (unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)) && susfs_is_current_proc_umounted()) {
 			seq_setwidth(m, 25 + sizeof(void *) * 6 - 1);
 			seq_put_hex_ll(m, NULL, vma->vm_start, 8);
 			seq_put_hex_ll(m, "-", vma->vm_end, 8);
@@ -534,7 +534,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 		if (unlikely(test_bit(AS_FLAGS_SUS_KSTAT, &inode->i_state) &&
 			susfs_is_current_proc_umounted_app()))
 		{
-			susfs_sus_ino_for_show_map_vma(inode->i_ino, &dev, &ino);
+			susfs_sus_kstat_spoof_show_map_vma(inode, &dev, &ino);
 			goto bypass_orig_flow;
 		}
 #endif

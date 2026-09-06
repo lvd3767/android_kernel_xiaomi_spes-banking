@@ -35,23 +35,19 @@
  * operation is supplied.
  */
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_sus_ino_for_generic_fillattr(unsigned long ino, struct kstat *stat);
+/*
+ * susfs 2.2.0: the fork's Kbuild has an automated sed step that injects
+ * a "susfs_kstat_hook" call before EXPORT_SYMBOL(generic_fillattr) if
+ * this string isn't already present in this file. We apply the exact
+ * same intended pattern by hand here (rather than calling the spoof
+ * function directly) so that marker is present and the Kbuild step
+ * correctly skips re-patching instead of injecting a duplicate call.
+ */
+extern void (*susfs_kstat_hook)(struct inode *inode, struct kstat *stat);
 #endif
 
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	if (unlikely(test_bit(AS_FLAGS_SUS_KSTAT, &inode->i_state)) &&
-		likely(susfs_is_current_proc_umounted_app()))
-	{
-		susfs_sus_ino_for_generic_fillattr(inode->i_ino, stat);
-		stat->mode = inode->i_mode;
-		stat->rdev = inode->i_rdev;
-		stat->uid = inode->i_uid;
-		stat->gid = inode->i_gid;
-		return;
-	}
-#endif
 	stat->dev = inode->i_sb->s_dev;
 	stat->ino = inode->i_ino;
 	stat->mode = inode->i_mode;
@@ -70,6 +66,11 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 		stat->result_mask &= ~STATX_ATIME;
 	if (IS_AUTOMOUNT(inode))
 		stat->attributes |= STATX_ATTR_AUTOMOUNT;
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	if (unlikely(susfs_kstat_hook))
+		susfs_kstat_hook(inode, stat);
+#endif
 }
 EXPORT_SYMBOL(generic_fillattr);
 

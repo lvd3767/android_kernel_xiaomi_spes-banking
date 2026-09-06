@@ -2010,26 +2010,29 @@ void set_dumpable(struct mm_struct *mm, int value)
 	} while (cmpxchg(&mm->flags, old, new) != old);
 }
 
-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
-extern bool ksu_execveat_hook __read_mostly;
-extern __attribute__((hot, always_inline)) int ksu_handle_execve_sucompat(const char __user **filename_user,
-			       void *__never_use_argv, void *__never_use_envp,
-			       int *__never_use_flags);
-extern int ksu_handle_execve_ksud(const char __user *filename_user,
-			const char __user *const __user *__argv);
-#endif
+/*
+ * susfs/KSU-Next 2.2.0 migration note: the raw pre-getname() su hook that
+ * used to live here (ksu_handle_execve_sucompat / ksu_handle_execve_ksud,
+ * called on the user-supplied filename string before path resolution) is
+ * NOT provided by the Youffx legacy-susfs fork with a compatible
+ * signature - ksu_handle_execve_ksud doesn't exist there at all, and
+ * ksu_handle_execve_sucompat takes (filename_user, orig_nr, pt_regs)
+ * instead, intended for a kprobe/syscall-table hook context, not a
+ * direct inline call here.
+ *
+ * This is not a functional regression: do_execve()/do_execveat_common()
+ * (called a few lines below via getname()+do_execve) already invoke the
+ * fully compatible ksu_handle_execveat()/ksu_handle_execveat_sucompat()
+ * on the resolved struct filename - that is the same su-launch detection,
+ * one layer down. This raw-string block was redundant defense-in-depth
+ * for the "su" -> "sh"/ksud rewrite, not the only hook path.
+ */
 
 SYSCALL_DEFINE3(execve,
 		const char __user *, filename,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
-	if (unlikely(ksu_execveat_hook))
-		ksu_handle_execve_ksud(filename, argv);
-	else
-		ksu_handle_execve_sucompat(&filename, NULL, NULL, NULL);
-#endif
 	return do_execve(getname(filename), argv, envp);
 }
 
@@ -2051,12 +2054,9 @@ COMPAT_SYSCALL_DEFINE3(execve, const char __user *, filename,
 	const compat_uptr_t __user *, argv,
 	const compat_uptr_t __user *, envp)
 {
-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK) // 32-bit su and 32-on-64 support
-	if (!ksu_execveat_hook)
-		ksu_handle_execve_sucompat(&filename, NULL, NULL, NULL);
-#endif
 	return compat_do_execve(getname(filename), argv, envp);
 }
+
 
 COMPAT_SYSCALL_DEFINE5(execveat, int, fd,
 		       const char __user *, filename,

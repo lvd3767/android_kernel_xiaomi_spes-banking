@@ -27,12 +27,11 @@
 #include "feature/kernel_umount.h"
 #include "compat/kernel_compat.h"
 #ifdef CONFIG_KSU_SUSFS
-#include <linux/susfs_def.h>
+#include "../susfs/susfs_def.h"
 #endif // #ifdef CONFIG_KSU_SUSFS
 
-extern void disable_seccomp(struct task_struct *tsk);
+extern void disable_seccomp(void);
 
-#ifdef CONFIG_KSU_SUSFS
 static inline bool is_zygote_isolated_service_uid(uid_t uid)
 {
     uid %= 100000;
@@ -45,6 +44,7 @@ static inline bool is_zygote_normal_app_uid(uid_t uid)
     return (uid >= 10000 && uid < 19999);
 }
 
+#ifdef CONFIG_KSU_SUSFS
 extern u32 susfs_zygote_sid;
 extern struct cred *ksu_cred;
 
@@ -104,9 +104,11 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     uid_t old_uid = current_uid().val;
 
     // We only interest in process spwaned by zygote
+#ifdef CONFIG_KSU_SUSFS
     if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid)) {
         return 0;
     }
+#endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
     // Check if spawned process is isolated service first, and force to do umount if so  
@@ -123,8 +125,6 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
         if (current->seccomp.mode == SECCOMP_MODE_FILTER && current->seccomp.filter) {
             ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
         }
-#else
-		disable_seccomp(current);
 #endif
 
 #ifdef KSU_KPROBES_HOOK
@@ -154,7 +154,7 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
             ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
         }
 #else
-		disable_seccomp(current);
+		disable_seccomp();
 #endif
 
 #ifdef KSU_KPROBES_HOOK
@@ -183,9 +183,10 @@ do_umount:
     //susfs_run_sus_path_loop(new_uid);
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 
+#ifdef CONFIG_KSU_SUSFS
     ksu_handle_extra_susfs_work();
-
     susfs_set_current_proc_umounted();
+#endif
 
     return 0;
 }

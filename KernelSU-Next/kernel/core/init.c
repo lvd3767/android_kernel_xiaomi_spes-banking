@@ -17,11 +17,14 @@
 #include "runtime/ksud_boot.h"
 #include "supercall/supercall.h"
 #include "ksu.h"
+#include "feature/sulog.h"
 #include "infra/file_wrapper.h"
 #ifdef CONFIG_KSU_SUSFS
-#include <linux/susfs.h>
+#include "susfs/susfs.h"
 #endif // #ifdef CONFIG_KSU_SUSFS
 #include "selinux/selinux.h"
+#include "feature/selinux_hide.h"
+#include "feature/adb_root.h"
 
 extern void __init ksu_lsm_hook_init(void);
 extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
@@ -101,6 +104,8 @@ int __init kernelsu_init(void)
 
 	ksu_feature_init();
 
+	ksu_sulog_init();
+
 	ksu_supercalls_init();
 
 	
@@ -110,6 +115,7 @@ int __init kernelsu_init(void)
 
 		apply_kernelsu_rules();
 		cache_sid();
+		ksu_selinux_hide_init();
 		setup_ksu_cred();
 
 		// Grant current process (ksud late-load) root
@@ -138,6 +144,10 @@ int __init kernelsu_init(void)
 		ksu_syscall_hook_manager_init();
 		
 		ksu_lsm_hook_init();
+
+		ksu_adb_root_init();
+
+		ksu_selinux_hide_init();
 
 		ksu_allowlist_init();
 
@@ -179,6 +189,10 @@ void __exit kernelsu_exit(void)
 	ksu_throne_tracker_exit();
 
 	ksu_allowlist_exit();
+
+	ksu_sulog_exit();
+
+	ksu_adb_root_exit();
 
 	ksu_feature_exit();
 

@@ -3,15 +3,27 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+#include <linux/jump_label.h>
+#endif
 
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-extern int susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
+extern void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m);
+extern struct static_key_false susfs_is_fake_cmdline_or_bootconfig_buffer_set;
 #endif
 
 static int cmdline_proc_show(struct seq_file *m, void *v)
 {
 #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
-	if (!susfs_spoof_cmdline_or_bootconfig(m)) {
+	/*
+	 * susfs 2.2.0: susfs_spoof_cmdline_or_bootconfig() no longer returns
+	 * an int or checks internally whether spoofing is enabled - it always
+	 * writes the fake buffer unconditionally. The caller must gate the
+	 * call itself via the exported static key (jump-label, near-zero
+	 * cost when disabled) instead of relying on the old return value.
+	 */
+	if (static_branch_unlikely(&susfs_is_fake_cmdline_or_bootconfig_buffer_set)) {
+		susfs_spoof_cmdline_or_bootconfig(m);
 		seq_putc(m, '\n');
 		return 0;
 	}

@@ -688,9 +688,24 @@ error:
 	return retval;
 }
 
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+/*
+ * New in this migration: KSU-Next 3.3.0 / susfs 2.2.0 introduces a manual
+ * setresuid hook (used for zygote app-spawn detection, manager fd install,
+ * and triggering SUS_MOUNT/TRY_UMOUNT for the newly spawned process) that
+ * did not exist in the KSU-Next 3.2.0 integration this kernel had before.
+ */
+extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+#endif
+
 SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 {
-	return __sys_setresuid(ruid, euid, suid);
+	long ret = __sys_setresuid(ruid, euid, suid);
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
+	if (!ret)
+		ksu_handle_setresuid(ruid, euid, suid);
+#endif
+	return ret;
 }
 
 SYSCALL_DEFINE3(getresuid, uid_t __user *, ruidp, uid_t __user *, euidp, uid_t __user *, suidp)
@@ -1257,7 +1272,13 @@ static int override_release(char __user *release, size_t len)
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
-extern void susfs_spoof_uname(struct new_utsname* tmp);
+/*
+ * susfs 2.2.0: use the fork's official function-pointer hook mechanism
+ * (susfs_uname_hook), pre-initialized to the real uname at boot by the
+ * driver itself, so this marker string also makes the Kbuild auto-patch
+ * step skip re-patching this file.
+ */
+extern void (*susfs_uname_hook)(struct new_utsname *tmp);
 #endif
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
@@ -1266,7 +1287,8 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
 #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
-	susfs_spoof_uname(&tmp);
+	if (unlikely(susfs_uname_hook))
+		susfs_uname_hook(&tmp);
 #endif
 #ifndef CONFIG_FAKE_UNAME_NONE
 	if (current_uid().val == 0) {

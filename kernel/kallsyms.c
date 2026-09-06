@@ -634,7 +634,9 @@ static void s_stop(struct seq_file *m, void *p)
 }
 
 #ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
-extern bool susfs_starts_with(const char *str, const char *prefix);
+/* susfs 2.2.0: susfs_starts_with() is now a static inline in susfs_def.h,
+ * not an extern symbol exported by susfs.c anymore. */
+#include <linux/susfs_def.h>
 #endif
 
 

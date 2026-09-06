@@ -851,7 +851,7 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 		vma = find_vma(mm, addr);
 		if (vma && vma->vm_file) {
 			struct inode *inode = file_inode(vma->vm_file);
-			if (unlikely(inode->i_state & BIT_SUS_MAPS) && susfs_is_current_proc_umounted()) {
+			if (unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)) && susfs_is_current_proc_umounted()) {
 				if (write) {
 					copied = -EFAULT;
 				} else {

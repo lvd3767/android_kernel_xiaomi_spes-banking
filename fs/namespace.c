@@ -37,7 +37,21 @@
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 extern bool susfs_is_current_ksu_domain(void);
 extern bool susfs_is_current_zygote_domain(void);
-extern bool susfs_is_sdcard_android_data_decrypted;
+/*
+ * susfs 2.2.0: plain bool "is_decrypted" replaced by an inverted
+ * jump-label static key "is_NOT_decrypted" (defaults true = not yet
+ * decrypted, cleared once vold finishes decrypting). Every call site
+ * below must invert its logic accordingly, not just rename the symbol.
+ */
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+
+/*
+ * susfs 2.2.0 dropped this constant from susfs_def.h - it was only ever
+ * used by this file's own local unshare-mount logic below, not by the
+ * driver itself, so it's safe to keep it defined locally with its
+ * original value to preserve existing behaviour exactly.
+ */
+#define DEFAULT_UNSHARE_KSU_MNT_ID 400000
 
 static atomic64_t susfs_ksu_mounts = ATOMIC64_INIT(0);
 #define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
@@ -1096,7 +1110,7 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
         // - We will just stop checking for ksu process if /sdcard/Android is accessible,
         //   for the sake of performance
-        if (!READ_ONCE(susfs_is_sdcard_android_data_decrypted) && susfs_is_current_ksu_domain()) {
+        if (static_branch_likely(&susfs_is_sdcard_android_data_not_decrypted) && susfs_is_current_ksu_domain()) {
                 mnt = susfs_alloc_non_unshare_ksu_vfsmnt(fc->source ?: "none");
                 goto bypass_orig_flow;
         }
@@ -1200,7 +1214,7 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	// - We will just stop checking for ksu process if /sdcard/Android is accessible,
 	//   for the sake of performance
-	if (READ_ONCE(susfs_is_sdcard_android_data_decrypted)) {
+	if (!static_branch_likely(&susfs_is_sdcard_android_data_not_decrypted)) {
 		goto skip_checking_for_ksu_proc;
 	}
 
