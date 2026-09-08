@@ -258,8 +258,7 @@ static void rmnet_dellink(struct net_device *dev, struct list_head *head)
 		rmnet_unregister_bridge(dev, port);
 		rmnet_vnd_dellink(mux_id, port, ep);
 		synchronize_rcu();
-		port->nr_rmnet_devs--;
-		kfree_rcu(ep, rcu);
+		kfree(ep);
 	}
 
 	if (!port->nr_rmnet_devs)
