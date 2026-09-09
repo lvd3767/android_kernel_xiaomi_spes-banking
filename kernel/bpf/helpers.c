@@ -953,7 +953,6 @@ static int bpf_trace_copy_string(char *buf, void *unsafe_ptr, char fmt_ptype,
 		fallthrough;
 #endif
 	case 'k':
-		case 'k':
 		return strncpy_from_kernel_nofault(buf, unsafe_ptr, bufsz);
 	case 'u':
 		return strncpy_from_user_nofault(buf, user_ptr, bufsz);
