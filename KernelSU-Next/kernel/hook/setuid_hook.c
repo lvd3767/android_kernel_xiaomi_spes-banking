@@ -125,6 +125,8 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
         if (current->seccomp.mode == SECCOMP_MODE_FILTER && current->seccomp.filter) {
             ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
         }
+#else
+        disable_seccomp();
 #endif
 
 #ifdef KSU_KPROBES_HOOK
