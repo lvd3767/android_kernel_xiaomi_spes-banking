@@ -953,7 +953,8 @@ static int bpf_trace_copy_string(char *buf, void *unsafe_ptr, char fmt_ptype,
 		fallthrough;
 #endif
 	case 'k':
-		return strncpy_from_unsafe(buf, unsafe_ptr, bufsz);
+		case 'k':
+		return strncpy_from_kernel_nofault(buf, unsafe_ptr, bufsz);
 	case 'u':
 		return strncpy_from_user_nofault(buf, user_ptr, bufsz);
 	}
@@ -1109,7 +1110,7 @@ int bpf_bprintf_prepare(char *fmt, u32 fmt_size, const u64 *raw_args,
 			}
 
 			unsafe_ptr = (char *)(long)raw_args[num_spec];
-			err = probe_kernel_read(cur_ip, unsafe_ptr, sizeof_cur_ip);
+			err = copy_from_kernel_nofault(cur_ip, unsafe_ptr, sizeof_cur_ip);
 			if (err < 0)
 				memset(cur_ip, 0, sizeof_cur_ip);
 
