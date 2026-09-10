@@ -337,7 +337,7 @@ addr_err:
 		unmap_kernel_range(virt_add, (unsigned long) size);
 ioremap_err:
 	if (area)
-		vfree(area->addr);
+		free_vm_area(area);
 dfps_mem_err:
 	/* free the dfps memory here */
 	memblock_free(offsets[0], offsets[1]);
