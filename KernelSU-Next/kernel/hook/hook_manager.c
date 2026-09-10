@@ -356,6 +356,44 @@ static void ksu_sys_enter_handler(void *data, struct pt_regs *regs, long id)
 		}
 	}
 }
+
+// Return-side dispatcher: needed because fd-based fstat()'s stat buffer is
+// only populated by the kernel *after* the real syscall body runs, so it
+// must be inspected/patched at sys_exit, not sys_enter. Without this, the
+// init.rc content injected via the read() hook (is_init_rc / KERNEL_SU_RC)
+// is silently dropped by init: init allocates its read buffer based on the
+// *unmodified* fstat() size and never sees the appended bytes, so the
+// injected "on post-fs-data ... exec ksud post-fs-data" block is never
+// parsed and ksud is never launched automatically at boot.
+static void ksu_sys_exit_handler(void *data, struct pt_regs *regs, long ret)
+{
+	long id = syscall_get_nr(current, regs);
+
+	if (unlikely(!ksu_su_compat_enabled))
+		return;
+
+#if defined(__NR_fstat)
+	if (id == __NR_fstat) {
+		unsigned int fd = (unsigned int)PT_REGS_PARM1(regs);
+		struct stat __user **statbuf_ptr =
+			(struct stat __user **)&PT_REGS_PARM2(regs);
+		ksu_handle_newfstat_ret(&fd, statbuf_ptr);
+		return;
+	}
+#endif
+
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+#if defined(__NR_fstat64)
+	if (id == __NR_fstat64) {
+		unsigned long fd = (unsigned long)PT_REGS_PARM1(regs);
+		struct stat64 __user **statbuf_ptr =
+			(struct stat64 __user **)&PT_REGS_PARM2(regs);
+		ksu_handle_fstat64_ret(&fd, statbuf_ptr);
+		return;
+	}
+#endif
+#endif
+}
 #endif
 
 void __init ksu_syscall_hook_manager_init(void)
@@ -380,6 +418,13 @@ void __init ksu_syscall_hook_manager_init(void)
 	} else {
 		pr_info("hook_manager: sys_enter tracepoint registered\n");
 	}
+
+	ret = register_trace_sys_exit(ksu_sys_exit_handler, NULL);
+	if (ret) {
+		pr_err("hook_manager: failed to register sys_exit tracepoint: %d\n", ret);
+	} else {
+		pr_info("hook_manager: sys_exit tracepoint registered\n");
+	}
 #endif
 
 	ksu_setuid_hook_init();
@@ -393,8 +438,9 @@ void __exit ksu_syscall_hook_manager_exit(void)
 	pr_info("hook_manager: ksu_hook_manager_exit called\n");
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
 	unregister_trace_sys_enter(ksu_sys_enter_handler, NULL);
+	unregister_trace_sys_exit(ksu_sys_exit_handler, NULL);
 	tracepoint_synchronize_unregister();
-	pr_info("hook_manager: sys_enter tracepoint unregistered\n");
+	pr_info("hook_manager: sys_enter/sys_exit tracepoints unregistered\n");
 #endif
 
 #ifdef CONFIG_KRETPROBES

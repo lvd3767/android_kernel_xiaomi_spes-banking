@@ -424,13 +424,7 @@ static bool is_init_rc(struct file *fp)
         return false;
     }
 
-    // DEBUG: log every init.rc-named file that `init` opens, matched or not,
-    // so we can see the real resolved path on this ROM (temporary, remove
-    // once the correct path is confirmed and added to valid_paths/is_init_rc).
-    pr_info("ksu debug: init opened file named init.rc at resolved path: %s\n", dpath);
-
     if (!!strcmp(dpath, "/init.rc") && !!strcmp(dpath, "/system/etc/init/hw/init.rc")) {
-        pr_info("ksu debug: path did NOT match known init.rc paths, injection skipped\n");
         return false;
     }
 
