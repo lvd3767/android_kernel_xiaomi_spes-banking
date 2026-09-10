@@ -1127,8 +1127,9 @@ int __cgroup_bpf_run_filter_sock_addr(struct sock *sk,
 		.t_ctx = t_ctx,
 	};
 	struct sockaddr_storage unspec;
-	struct cgroup *cgrp;
-	int ret;
+    struct bpf_prog_array *prog_array;
+    struct cgroup *cgrp;
+    int ret;
 
 	/* Check socket family since not all sockets represent network
 	 * endpoint (e.g. AF_UNIX).
