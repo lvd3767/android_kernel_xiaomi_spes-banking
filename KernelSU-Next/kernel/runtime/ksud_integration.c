@@ -424,6 +424,7 @@ static bool is_init_rc(struct file *fp)
         return false;
     }
 
+    if (!!strcmp(dpath, "/init.rc") && !!strcmp(dpath, "/system/etc/init/hw/init.rc")) {
         return false;
     }
 
