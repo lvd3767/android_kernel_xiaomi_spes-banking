@@ -19,7 +19,7 @@
 #include <linux/proc_ns.h>
 #include <linux/security.h>
 #include <linux/uaccess.h>
-
+#include <linux/string.h>
 #include "../../lib/kstrtox.h"
 
 /* If kernel subsystem is allowing eBPF programs to call this function,

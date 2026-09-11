@@ -1505,6 +1505,9 @@ struct task_struct {
 	/* Used for BPF run context. */
 	struct bpf_run_ctx		*bpf_ctx;
 #endif
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
+	struct task_struct		*simple_lmk_next;
+#endif
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 	int ux_state;
 	atomic64_t inherit_ux;

@@ -3,7 +3,8 @@
 #
 
 config BINARY_PRINTF
-	def_bool n
+	bool
+	default y
 
 menu "Library routines"
 

@@ -4292,10 +4292,6 @@ enum bpf_lwt_encap_mode {
 	BPF_LWT_ENCAP_IP,
 };
 
-/* Flags for bpf_bprm_opts_set helper */
-enum {
-	BPF_F_BPRM_SECUREEXEC	= (1ULL << 0),
-};
 
 #define __bpf_md_ptr(type, name)	\
 union {					\
@@ -5155,17 +5151,6 @@ struct bpf_redir_neigh {
 		__be32		ipv4_nh;
 		__u32		ipv6_nh[4];  /* in6_addr; network order */
 	};
-};
-
-/* bpf_check_mtu flags*/
-enum  bpf_check_mtu_flags {
-	BPF_MTU_CHK_SEGS  = (1U << 0),
-};
-
-enum bpf_check_mtu_ret {
-	BPF_MTU_CHK_RET_SUCCESS,      /* check and lookup successful */
-	BPF_MTU_CHK_RET_FRAG_NEEDED,  /* fragmentation required to fwd */
-	BPF_MTU_CHK_RET_SEGS_TOOBIG,  /* GSO re-segmentation needed to fwd */
 };
 
 enum bpf_task_fd_type {

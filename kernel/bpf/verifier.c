@@ -4642,6 +4642,61 @@ static int check_helper_mem_access(struct bpf_verifier_env *env, int regno,
 		return -EACCES;
 	}
 }
+int check_mem_reg(struct bpf_verifier_env *env, struct bpf_reg_state *reg,
+                  u32 regno, u32 mem_size)
+{
+    bool may_be_null = reg_type_may_be_null(reg->type);
+    struct bpf_reg_state saved_reg;
+    struct bpf_call_arg_meta meta;
+    int err;
+
+    if (register_is_null(reg))
+        return 0;
+
+    memset(&meta, 0, sizeof(meta));
+
+    if (may_be_null) {
+        saved_reg = *reg;
+        switch (reg->type) {
+case PTR_TO_MAP_VALUE_OR_NULL:
+    reg->type = PTR_TO_MAP_VALUE;
+    break;
+case PTR_TO_SOCKET_OR_NULL:
+    reg->type = PTR_TO_SOCKET;
+    break;
+case PTR_TO_SOCK_COMMON_OR_NULL:
+    reg->type = PTR_TO_SOCK_COMMON;
+    break;
+case PTR_TO_TCP_SOCK_OR_NULL:
+    reg->type = PTR_TO_TCP_SOCK;
+    break;
+case PTR_TO_BTF_ID_OR_NULL:
+    reg->type = PTR_TO_BTF_ID;
+    break;
+case PTR_TO_MEM_OR_NULL:
+    reg->type = PTR_TO_MEM;
+    break;
+case PTR_TO_RDONLY_BUF_OR_NULL:
+    reg->type = PTR_TO_RDONLY_BUF;
+    break;
+case PTR_TO_RDWR_BUF_OR_NULL:
+    reg->type = PTR_TO_RDWR_BUF;
+    break;
+default:
+    break;
+}
+    }
+
+    err = check_helper_mem_access(env, regno, mem_size, true, &meta);
+
+    meta.raw_mode = true;
+    err = err ?: check_helper_mem_access(env, regno, mem_size, true, &meta);
+
+    if (may_be_null)
+        *reg = saved_reg;
+
+    return err;
+}
 
 /* Implementation details:
  * bpf_map_lookup returns PTR_TO_MAP_VALUE_OR_NULL
@@ -6949,7 +7004,7 @@ reject:
 		if (reg_is_pkt_pointer(ptr_reg)) {
 			dst_reg->id = ++env->id_gen;
 			/* something was added to pkt_ptr, set range to zero */
-			dst_reg->raw = 0;
+			memset(&dst_reg->raw, 0, sizeof(dst_reg->raw));
 		}
 		break;
 	case BPF_SUB:
@@ -7009,7 +7064,7 @@ reject:
 			dst_reg->id = ++env->id_gen;
 			/* something was added to pkt_ptr, set range to zero */
 			if (smin_val < 0)
-				dst_reg->raw = 0;
+				memset(&dst_reg->raw, 0, sizeof(dst_reg->raw));
 		}
 		break;
 	case BPF_AND:

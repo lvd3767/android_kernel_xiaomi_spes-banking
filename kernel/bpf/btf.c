@@ -4695,7 +4695,7 @@ struct btf *bpf_prog_get_target_btf(const struct bpf_prog *prog)
 
 	if (tgt_prog)
 		return tgt_prog->aux->btf;
-	} else {
+	 else {
 		return prog->aux->attach_btf ?: btf_vmlinux;
 	}
 }
@@ -5936,11 +5936,6 @@ int btf_get_fd_by_id(u32 id)
 		btf_put(btf);
 
 	return fd;
-}
-
-u32 btf_obj_id(const struct btf *btf)
-{
-	return btf->id;
 }
 
 u32 btf_obj_id(const struct btf *btf)

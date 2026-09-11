@@ -910,6 +910,7 @@ out:
 	bpf_prog_array_free(progs);
 	kfree(user_ctx);
 	return ret;
+}
 int bpf_prog_test_run_syscall(struct bpf_prog *prog,
 			      const union bpf_attr *kattr,
 			      union bpf_attr __user *uattr)

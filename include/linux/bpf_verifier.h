@@ -361,7 +361,6 @@ struct bpf_insn_aux_data {
 			struct btf *btf;		/* BTF object for pseudo_btf_id */
 			union {
 				struct {
-					struct btf *btf;
 					u32 btf_id;	/* btf_id for struct typed var */
 				};
 				u32 mem_size;	/* mem_size for non-struct typed var */
