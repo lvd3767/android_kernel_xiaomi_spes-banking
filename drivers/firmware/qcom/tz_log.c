@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/proc_fs.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -1114,7 +1115,7 @@ static int tzdbg_request_encrypted_log(dma_addr_t buf_paddr,
 	desc.args[1] = len;
 	desc.args[2] = log_id;
 	desc.arginfo = TZ_OS_REQUEST_ENCR_LOG_BUFFER_ID_PARAM_ID;
-	pr_debug("%s: buf_paddr %lx, len %d, log_id %d\n",
+	pr_debug("%s: buf_paddr %llx, len %zu, log_id %u\n",
 		 __func__, (uint64_t)buf_paddr, len, log_id);
 	ret = scm_call2(smc_id, &desc);
 	if (ret || desc.ret[0] != QSEOS_RESULT_SUCCESS) {
@@ -1228,7 +1229,7 @@ static ssize_t tzdbgfs_read_encrypted(struct file *file, char __user *buf,
 	stat->display_offset += ret;
 	stat->display_len -= ret;
 	pr_debug("ret = %d, offset = %d\n", ret, (int)(*offp));
-	pr_debug("display_len = %d, offset = %d\n",
+	pr_debug("display_len = %zu, offset = %zu\n",
 		 stat->display_len, stat->display_offset);
 	return ret;
 }
@@ -1410,44 +1411,98 @@ static void tzdbg_free_encrypted_log_buf(struct platform_device *pdev)
 			enc_qseelog_info.vaddr, enc_qseelog_info.paddr);
 }
 
-static int  tzdbgfs_init(struct platform_device *pdev)
+static void tzdbgfs_init(struct platform_device *pdev)
 {
-	int rc = 0;
 	int i;
 	struct dentry           *dent_dir;
 	struct dentry           *dent;
 
+	for (i = 0; i < TZDBG_STATS_MAX; i++)
+		tzdbg.debug_tz[i] = i;
+
+	if (!IS_ENABLED(CONFIG_DEBUG_FS))
+		return;
+
 	dent_dir = debugfs_create_dir("tzdbg", NULL);
-	if (dent_dir == NULL) {
-		dev_err(&pdev->dev, "tzdbg debugfs_create_dir failed\n");
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(dent_dir)) {
+		dev_warn(&pdev->dev, "tzdbg debugfs_create_dir failed\n");
+		return;
 	}
 
 	for (i = 0; i < TZDBG_STATS_MAX; i++) {
-		tzdbg.debug_tz[i] = i;
 		dent = debugfs_create_file_unsafe(tzdbg.stat[i].name,
 				0444, dent_dir,
 				&tzdbg.debug_tz[i], &tzdbg_fops);
-		if (dent == NULL) {
-			dev_err(&pdev->dev, "TZ debugfs_create_file failed\n");
-			rc = -ENOMEM;
+		if (IS_ERR_OR_NULL(dent)) {
+			dev_warn(&pdev->dev, "TZ debugfs_create_file failed\n");
 			goto err;
 		}
 	}
 
 	platform_set_drvdata(pdev, dent_dir);
-	return 0;
+	return;
 err:
 	debugfs_remove_recursive(dent_dir);
-
-	return rc;
+	platform_set_drvdata(pdev, NULL);
 }
 
 static void tzdbgfs_exit(struct platform_device *pdev)
 {
 	struct dentry *dent_dir;
+
+	if (!IS_ENABLED(CONFIG_DEBUG_FS))
+		return;
+
 	dent_dir = platform_get_drvdata(pdev);
 	debugfs_remove_recursive(dent_dir);
+}
+
+static struct proc_dir_entry *tz_proc_dir;
+
+static int tz_proc_open(struct inode *inode, struct file *file)
+{
+	file->private_data = PDE_DATA(inode);
+	return 0;
+}
+
+static const struct file_operations tz_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = tz_proc_open,
+	.read    = tzdbgfs_read,
+	.llseek  = default_llseek,
+};
+
+static void tz_proc_init(void)
+{
+	if (!IS_ENABLED(CONFIG_PROC_FS))
+		return;
+
+	tz_proc_dir = proc_mkdir("tzdbg", NULL);
+	if (!tz_proc_dir) {
+		pr_err("%s: failed to create /proc/tzdbg\n", __func__);
+		return;
+	}
+
+	if (!proc_create_data("qsee_log", 0444, tz_proc_dir,
+			      &tz_proc_fops,
+			      &tzdbg.debug_tz[TZDBG_QSEE_LOG]))
+		pr_err("%s: failed to create /proc/tzdbg/qsee_log\n", __func__);
+
+	if (!proc_create_data("tz_log", 0444, tz_proc_dir,
+			      &tz_proc_fops,
+			      &tzdbg.debug_tz[TZDBG_LOG]))
+		pr_err("%s: failed to create /proc/tzdbg/tz_log\n", __func__);
+}
+
+static void tz_proc_exit(void)
+{
+	if (!IS_ENABLED(CONFIG_PROC_FS))
+		return;
+
+	if (tz_proc_dir) {
+		proc_remove(tz_proc_dir);
+		tz_proc_dir = NULL;
+	}
 }
 
 static int __update_hypdbg_base(struct platform_device *pdev,
@@ -1523,7 +1578,7 @@ static int tzdbg_get_tz_version(void)
 
 	version = desc.ret[0];
 
-	pr_warn("tz diag version is %x\n", version);
+	pr_warn("tz diag version is %llx\n", version);
 	if (
 	(((version >> TZBSP_FVER_MAJOR_SHIFT) & TZBSP_FVER_MAJOR_MINOR_MASK)
 			== TZBSP_DIAG_MAJOR_VERSION_V9) &&
@@ -1550,7 +1605,7 @@ static void tzdbg_encrypted_log_init(void)
 		pr_err("scm_call QUERY_ENCR_LOG_FEATURE failed ret %d\n", ret);
 		tzdbg.is_encrypted_log_enabled = false;
 	} else {
-		pr_info("encrypted qseelog enabled is %d\n", desc.ret[0]);
+		pr_info("encrypted qseelog enabled is %llu\n", desc.ret[0]);
 		tzdbg.is_encrypted_log_enabled = desc.ret[0];
 	}
 }
@@ -1653,7 +1708,7 @@ static int tz_log_probe(struct platform_device *pdev)
 	ret = tzdbg_allocate_encrypted_log_buf(pdev);
 	if (ret) {
 		dev_err(&pdev->dev,
-			"Failed to allocate encrypted log buffer\n",
+			"%s: Failed to allocate encrypted log buffer\n",
 			__func__);
 		goto exit_free_qsee_log_buf;
 	}
@@ -1671,13 +1726,10 @@ static int tz_log_probe(struct platform_device *pdev)
 		goto exit_free_encr_log_buf;
 	}
 
-	if (tzdbgfs_init(pdev))
-		goto exit_free_disp_buf;
+	tzdbgfs_init(pdev);
+	tz_proc_init();
 	return 0;
 
-exit_free_disp_buf:
-	dma_free_coherent(&pdev->dev, display_buf_size,
-			(void *)tzdbg.disp_buf, disp_buf_paddr);
 exit_free_encr_log_buf:
 	tzdbg_free_encrypted_log_buf(pdev);
 exit_free_qsee_log_buf:
@@ -1689,6 +1741,7 @@ exit_free_diag_buf:
 
 static int tz_log_remove(struct platform_device *pdev)
 {
+	tz_proc_exit();
 	tzdbgfs_exit(pdev);
 	dma_free_coherent(&pdev->dev, display_buf_size,
 			  (void *)tzdbg.disp_buf, disp_buf_paddr);
