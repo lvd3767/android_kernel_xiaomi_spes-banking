@@ -1,5 +1,6 @@
 #ifdef KSU_KPROBES_HOOK
 #include "linux/printk.h"
+#include <linux/limits.h>
 #include <linux/spinlock.h>
 #include <linux/kprobes.h>
 #include <linux/tracepoint.h>
@@ -291,7 +292,8 @@ int ksu_handle_init_mark_tracker(const char __user **filename_user)
 	if (unlikely(strcmp(path, KSUD_PATH) == 0)) {
 		pr_info("hook_manager: escape to root for init executing ksud: %d\n", current->pid);
 		escape_to_root_for_init();
-	} else if (likely(strstr(path, "/app_process") == NULL && strstr(path, "/adbd") == NULL)) {
+	} else if (likely(strstr(path, "/app_process") == NULL && strstr(path, "/adbd") == NULL &&
+			  strstr(path, "/stub_zygote") == NULL)) {
 		pr_info("hook_manager: unmark %d exec %s\n", current->pid, path);
 		ksu_clear_task_tracepoint_flag_if_needed(current);
 	}
@@ -371,7 +373,13 @@ void __init ksu_syscall_hook_manager_init(void)
 #endif
 
 #ifdef CONFIG_HAVE_SYSCALL_TRACEPOINTS
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+	// Register with minimum priority so perf/bpf handlers run before
+	// we modify the syscall context
+	ret = register_trace_prio_sys_enter(ksu_sys_enter_handler, NULL, INT_MIN);
+#else
 	ret = register_trace_sys_enter(ksu_sys_enter_handler, NULL);
+#endif
 #ifndef CONFIG_KRETPROBES
 	ksu_mark_running_process_locked();
 #endif
@@ -412,10 +420,14 @@ void __exit ksu_syscall_hook_manager_exit(void)
 #include "hook_manager.h"
 #include "feature/sucompat.h"
 #include "setuid_hook.h"
+#include "syscall_table_hook.h"
 
 void __init ksu_syscall_hook_manager_init(void)
 {
 	pr_info("hook_manager: initializing..\n");
+#ifdef KSU_SYSCALL_TABLE_HOOK
+	ksu_syscall_table_hook_init();
+#endif
 	ksu_setuid_hook_init();
 	ksu_sucompat_init();
 	ksu_avc_spoof_init();
@@ -425,6 +437,9 @@ void __init ksu_syscall_hook_manager_init(void)
 void __exit ksu_syscall_hook_manager_exit(void)
 {
 	pr_info("hook_manager: exiting..\n");
+#ifdef KSU_SYSCALL_TABLE_HOOK
+	ksu_syscall_table_hook_exit();
+#endif
 	ksu_sucompat_exit();
 	ksu_setuid_hook_exit();
 	ksu_avc_spoof_exit();
