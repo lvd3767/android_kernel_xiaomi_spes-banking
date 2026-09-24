@@ -13,7 +13,7 @@
 
 struct mount;
 
-#define SUSFS_VERSION "v2.2.0"
+#define SUSFS_VERSION "v2.3.0"
 #define SUSFS_VARIANT "Standalone"
 
 enum UID_SCHEME {
@@ -79,11 +79,13 @@ struct st_susfs_sus_kstat {
 };
 
 struct st_susfs_sus_kstat_hlist {
-	unsigned long              target_ino;
-	unsigned long              target_dev;
-	bool                       is_fuse;
-	struct st_susfs_sus_kstat  info;
-	struct hlist_node          node;
+	struct hlist_node node;
+	unsigned long target_ino;
+	unsigned long target_dev;
+	struct kstatfs spoofed_kstatfs;
+	int spoofed_mnt_id;
+	bool is_fuse;
+	struct st_susfs_sus_kstat info;
 };
 #endif
 
@@ -177,7 +179,8 @@ extern struct static_key_false susfs_is_hide_sus_mnts_for_non_su_procs_enabled;
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 void susfs_add_sus_kstat(void __user **user_info);
 void susfs_update_sus_kstat(void __user **user_info);
-void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat);
+bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
 void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
 #endif
 
@@ -202,9 +205,8 @@ void susfs_add_open_redirect(void __user **user_info);
 struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
 int susfs_open_redirect_spoof_vfs_readlink(struct inode *inode, char __user *buffer, int buflen);
 int susfs_open_redirect_spoof_do_proc_readlink(struct inode *inode, char *tmp_buf, int buflen);
-int susfs_open_redirect_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf);
-int susfs_open_redirect_spoof_seq_show(struct inode *inode, int *out_mnt_id, unsigned long *out_ino);
-int susfs_open_redirect_spoof_show_map_vma(struct inode *inode, unsigned long *out_ino, dev_t *out_dev, char *spoofed_name);
+extern struct srcu_struct susfs_srcu_open_redirect;
+int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, unsigned long *out_ino, dev_t *out_dev, char **out_spoofed_name);
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
@@ -216,7 +218,7 @@ void susfs_get_enabled_features(void __user **user_info);
 void susfs_show_variant(void __user **user_info);
 void susfs_show_version(void __user **user_info);
 void susfs_start_sdcard_monitor_fn(void);
-void susfs_init(void);
+void __init susfs_init(void);
 
 extern struct static_key_false susfs_is_avc_log_spoofing_enabled;
 
