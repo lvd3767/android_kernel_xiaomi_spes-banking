@@ -141,3 +141,7 @@ kernel/configs/android-*.cfg
 #
 Android.bp
 out/
+*.bak
+*.bak[0-9]*
+*.bak_*
+build.log

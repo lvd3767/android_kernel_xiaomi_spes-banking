@@ -32,6 +32,13 @@
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 extern void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
+
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#include <linux/srcu.h>
+extern struct srcu_struct susfs_srcu_open_redirect;
+extern int susfs_open_redirect_spoof_show_map_vma_srcu(struct inode *inode, unsigned long *out_ino,
+			dev_t *out_dev, char **out_spoofed_name);
+#endif
 #endif
 
 #define SEQ_PUT_DEC(str, val) \
@@ -509,9 +516,26 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	unsigned long start, end;
 	dev_t dev = 0;
 	const char *name = NULL;
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+	bool susfs_open_redirect_active = false;
+	char *susfs_open_redirect_spoofed_name = NULL;
+	int susfs_open_redirect_srcu_idx = 0;
+#endif
 
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+		if (SUSFS_IS_INODE_OPEN_REDIRECT(inode)) {
+			susfs_open_redirect_srcu_idx = srcu_read_lock(&susfs_srcu_open_redirect);
+			if (!susfs_open_redirect_spoof_show_map_vma_srcu(inode, &ino, &dev,
+					&susfs_open_redirect_spoofed_name)) {
+				susfs_open_redirect_active = true;
+			} else {
+				srcu_read_unlock(&susfs_srcu_open_redirect, susfs_open_redirect_srcu_idx);
+			}
+		}
+		if (!susfs_open_redirect_active) {
+#endif
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		if (unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)) && susfs_is_current_proc_umounted()) {
 			seq_setwidth(m, 25 + sizeof(void *) * 6 - 1);
@@ -543,6 +567,10 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 bypass_orig_flow:
 #endif
+		;
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+		}
+#endif
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 	}
 
@@ -556,6 +584,27 @@ bypass_orig_flow:
 	 * special [heap] marker for the heap:
 	 */
 	if (file) {
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+		if (susfs_open_redirect_active) {
+			char *buf;
+			size_t size = seq_get_buf(m, &buf);
+
+			if (susfs_open_redirect_spoofed_name && size > 1) {
+				size_t len = strlen(susfs_open_redirect_spoofed_name);
+
+				if (len >= size)
+					len = size - 1;
+				memcpy(buf, susfs_open_redirect_spoofed_name, len);
+				buf[len] = '\n';
+				seq_commit(m, len + 1);
+			} else {
+				seq_commit(m, -1);
+			}
+			srcu_read_unlock(&susfs_srcu_open_redirect, susfs_open_redirect_srcu_idx);
+			return;
+		}
+#endif
+		{
 		char *buf;
 		size_t size = seq_get_buf(m, &buf);
 
@@ -583,6 +632,7 @@ bypass_orig_flow:
 		/* Set the overflow status to get more memory */
 		seq_commit(m, -1);
 		return;
+		}
 	}
 
 	if (vma->vm_ops && vma->vm_ops->name) {

@@ -43,7 +43,8 @@
  * function directly) so that marker is present and the Kbuild step
  * correctly skips re-patching instead of injecting a duplicate call.
  */
-extern void (*susfs_kstat_hook)(struct inode *inode, struct kstat *stat);
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
 #endif
 
 void generic_fillattr(struct inode *inode, struct kstat *stat)
@@ -68,8 +69,12 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 		stat->attributes |= STATX_ATTR_AUTOMOUNT;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	if (unlikely(susfs_kstat_hook))
-		susfs_kstat_hook(inode, stat);
+	if (susfs_is_current_proc_umounted_app()) {
+		bool is_fuse = false;
+		if (susfs_is_inode_sus_kstat(inode, &is_fuse))
+			susfs_sus_kstat_spoof_generic_fillattr(inode, stat,
+				is_fuse ? STATX_SUS_KSTAT_FUSE : STATX_SUS_KSTAT);
+	}
 #endif
 }
 EXPORT_SYMBOL(generic_fillattr);

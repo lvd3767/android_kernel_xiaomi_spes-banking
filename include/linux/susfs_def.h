@@ -54,6 +54,9 @@
 #define ND_STATE_OPEN_LAST 64
 #define ND_FLAGS_LOOKUP_LAST 0x2000000
 
+#define STATX_SUS_KSTAT 0x10000000U
+#define STATX_SUS_KSTAT_FUSE 0x20000000U
+
 static inline bool susfs_starts_with(const char *str, const char *prefix)
 {
 	while (*prefix)

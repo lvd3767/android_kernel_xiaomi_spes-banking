@@ -3893,3 +3893,46 @@ void susfs_reorder_mnt_id(void) {
 	put_mnt_ns(mnt_ns);
 }
 #endif
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+/* susfs 2.3.0 (priorite 2 - fix link) : portees depuis wxx9248/susfs4ksu,
+ * kernel-4.9-v2, fs/namespace.c -- aucune adaptation 4.9->4.19 necessaire,
+ * DEFAULT_KSU_MNT_ID / lock_mount_hash / real_mount deja utilises tels
+ * quels dans ce fichier. */
+
+/* Retrieve the non sus mnt_id from a mount */
+int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt)
+{
+	struct mount *mnt = orig_mnt;
+	int mnt_id;
+
+	lock_mount_hash();
+	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent &&
+			mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent) { }
+	mnt_id = mnt->mnt_id;
+	unlock_mount_hash();
+	return mnt_id;
+}
+
+/*
+ * Retrieve the non sus vfsmount from a vfsmount; takes a reference on both
+ * &mnt->mnt and mnt->mnt.mnt_root.
+ */
+struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt)
+{
+	struct mount *mnt = real_mount(vfsmnt);
+
+	lock_mount_hash();
+	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent &&
+			mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent) { }
+	mntget(&mnt->mnt);
+	if (!mnt->mnt.mnt_root || IS_ERR(mnt->mnt.mnt_root)) {
+		mntput(&mnt->mnt);
+		unlock_mount_hash();
+		return vfsmnt;
+	}
+	dget(mnt->mnt.mnt_root);
+	unlock_mount_hash();
+	return &mnt->mnt;
+}
+#endif
