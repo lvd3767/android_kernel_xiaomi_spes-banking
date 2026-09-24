@@ -1,4 +1,7 @@
+
 #include <asm/ptrace.h>
+#include <linux/err.h>
+#include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/path.h>
 #include <linux/printk.h>
@@ -13,16 +16,27 @@
 #include "arch.h"
 #include "policy/feature.h"
 #include "selinux/selinux.h"
+#include "runtime/ksud.h"
+#include "compat/kernel_compat.h"
 
 #include "klog.h" // IWYU pragma: keep
 
 DEFINE_STATIC_KEY_FALSE(ksu_adb_root);
 
-static long is_exec_adbd(struct pt_regs *regs)
+static long is_adbd_path(const char *path, long len)
 {
     static const char kAdbd[] = "/adbd";
     static const size_t kAdbdLen = sizeof(kAdbd) - 1;
-    char __user *filename_user = (char __user *)PT_REGS_PARM1(regs);
+
+    if (len < kAdbdLen || memcmp(path + len - kAdbdLen, kAdbd, kAdbdLen + 1) != 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static long is_exec_adbd(const char __user *filename_user)
+{
     // should be bigger than `/apex/com.android.adbd/bin/adbd`
     char buf[40];
     char __user *fn;
@@ -36,11 +50,7 @@ static long is_exec_adbd(struct pt_regs *regs)
         return ret;
     }
 
-    if (ret < kAdbdLen || memcmp(buf + ret - kAdbdLen, kAdbd, kAdbdLen + 1) != 0) {
-        return 0;
-    }
-
-    return 1;
+    return is_adbd_path(buf, ret);
 }
 
 static long is_libadbroot_ok()
@@ -55,6 +65,7 @@ static long is_libadbroot_ok()
         } else {
             pr_err("access libadbroot.so failed: %ld, skip adb root\n", ret);
         }
+        return ret;
     } else {
         ret = 1;
     }
@@ -62,30 +73,35 @@ static long is_libadbroot_ok()
     return ret;
 }
 
-static long setup_ld_preload(struct pt_regs *regs)
+static long setup_ld_preload(unsigned long *envp_p)
 {
     static const char kLdPreload[] = "LD_PRELOAD=/data/adb/ksu/lib/libadbroot.so";
     static const char kLdLibraryPath[] = "LD_LIBRARY_PATH=/data/adb/ksu/lib";
     static const size_t kReadEnvBatch = 16;
     static const size_t kPtrSize = sizeof(unsigned long);
-    unsigned long stackp = user_stack_pointer(regs);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) || defined(current_user_stack_pointer)
+    unsigned long stackp = current_user_stack_pointer();
+#else
+    volatile unsigned long stackp = current->mm->start_stack; // its just a stack smash in the end, it'll work.
+#endif
     unsigned long envp, ld_preload_p, ld_library_path_p;
-    unsigned long *envp_p = (unsigned long *)&PT_REGS_PARM3(regs);
     unsigned long *tmp_env_p = NULL, *tmp_env_p2 = NULL;
     size_t env_count = 0, total_size;
     long ret;
 
-    envp = (char __user **)untagged_addr((unsigned long)*envp_p);
+    envp = (unsigned long)untagged_addr((unsigned long)*envp_p);
 
     ld_preload_p = stackp = ALIGN_DOWN(stackp - sizeof(kLdPreload), 8);
-    ret = copy_to_user(ld_preload_p, kLdPreload, sizeof(kLdPreload));
+
+    ret = copy_to_user((void __user *)ld_preload_p, kLdPreload, sizeof(kLdPreload));
     if (ret != 0) {
         pr_warn("write ld_preload when adb_root_handle_execve failed: %ld\n", ret);
         return -EFAULT;
     }
 
     ld_library_path_p = stackp = ALIGN_DOWN(stackp - sizeof(kLdLibraryPath), 8);
-    ret = copy_to_user(ld_library_path_p, kLdLibraryPath, sizeof(kLdLibraryPath));
+
+    ret = copy_to_user((void __user *)ld_library_path_p, kLdLibraryPath, sizeof(kLdLibraryPath));
     if (ret != 0) {
         pr_warn("write ld_library_path when adb_root_handle_execve failed: %ld\n", ret);
         return -EFAULT;
@@ -99,7 +115,9 @@ static long setup_ld_preload(struct pt_regs *regs)
             goto out_release_env_p;
         }
         tmp_env_p = tmp_env_p2;
-        ret = copy_from_user(&tmp_env_p[env_count], envp + env_count * kPtrSize, kReadEnvBatch * kPtrSize);
+
+        ret = copy_from_user(&tmp_env_p[env_count], (const void __user *)(envp + env_count * kPtrSize),
+                             kReadEnvBatch * kPtrSize);
         if (ret < 0) {
             pr_warn("Access envp when adb_root_handle_execve failed: %ld\n", ret);
             ret = -EFAULT;
@@ -138,7 +156,8 @@ static long setup_ld_preload(struct pt_regs *regs)
     total_size = env_count * kPtrSize;
 
     stackp -= total_size;
-    ret = copy_to_user(stackp, tmp_env_p, total_size);
+
+    ret = copy_to_user((void __user *)stackp, tmp_env_p, total_size);
     if (ret != 0) {
         pr_err("copy new env failed: %ld\n", ret);
         ret = -EFAULT;
@@ -156,17 +175,13 @@ out_release_env_p:
     return ret;
 }
 
-static long do_ksu_adb_root_handle_execve(struct pt_regs *regs)
+static long do_ksu_adb_root(unsigned long *envp_p)
 {
-    if (likely(is_exec_adbd(regs) != 1)) {
-        return 0;
-    }
-
     if (unlikely(is_libadbroot_ok() != 1)) {
         return 0;
     }
 
-    long ret = setup_ld_preload(regs);
+    long ret = setup_ld_preload(envp_p);
     if (ret) {
         return ret;
     }
@@ -176,12 +191,64 @@ static long do_ksu_adb_root_handle_execve(struct pt_regs *regs)
     return 0;
 }
 
+static long do_ksu_adb_root_handle_execve(const char __user *filename_user,
+					  unsigned long *envp_p)
+{
+    if (likely(is_exec_adbd(filename_user) != 1)) {
+        return 0;
+    }
+
+    return do_ksu_adb_root(envp_p);
+}
+
+// execve(filename, argv, envp)
 long ksu_adb_root_handle_execve(struct pt_regs *regs)
 {
     if (static_branch_unlikely(&ksu_adb_root)) {
-        return do_ksu_adb_root_handle_execve(regs);
+        return do_ksu_adb_root_handle_execve(
+                (const char __user *)PT_REGS_PARM1(regs),
+                (unsigned long *)&PT_REGS_PARM3(regs));
     }
     return 0;
+}
+
+// execveat(dfd, filename, argv, envp, flags)
+long ksu_adb_root_handle_execveat(struct pt_regs *regs)
+{
+    if (static_branch_unlikely(&ksu_adb_root)) {
+        return do_ksu_adb_root_handle_execve(
+                (const char __user *)PT_REGS_PARM2(regs),
+                (unsigned long *)&PT_REGS_SYSCALL_PARM4(regs));
+    }
+    return 0;
+}
+
+// manual hook in do_execve()/compat_do_execve(): the filename is already
+// resolved kernel-side and envp is a struct user_arg_ptr, not a register set.
+long ksu_adb_root_handle_execve_filename(struct filename *filename,
+					 struct user_arg_ptr *envp)
+{
+    if (!static_branch_unlikely(&ksu_adb_root)) {
+        return 0;
+    }
+
+    if (!filename || IS_ERR(filename) || !filename->name || !envp) {
+        return 0;
+    }
+
+#ifdef CONFIG_COMPAT
+    // the compat envp array holds 32-bit pointers, which setup_ld_preload()
+    // cannot rewrite in place; adbd is never a 32-bit process anyway.
+    if (envp->is_compat) {
+        return 0;
+    }
+#endif
+
+    if (likely(is_adbd_path(filename->name, strlen(filename->name)) != 1)) {
+        return 0;
+    }
+
+    return do_ksu_adb_root((unsigned long *)&envp->ptr.native);
 }
 
 static int kernel_adb_root_feature_get(u64 *value)
