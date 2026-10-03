@@ -48,6 +48,9 @@ choice
 	  Select the I/O scheduler which will be used by default for all
 	  block devices.
 
+	config DEFAULT_MQ_IOSCHED_CPQ
+		bool "MQ_IOSCHED_CPQ" if MQ_IOSCHED_CPQ=y
+
 	config DEFAULT_DEADLINE
 		bool "Deadline" if IOSCHED_DEADLINE=y
 
@@ -61,9 +64,19 @@ endchoice
 
 config DEFAULT_IOSCHED
 	string
+	default "cpq" if DEFAULT_MQ_IOSCHED_CPQ
 	default "deadline" if DEFAULT_DEADLINE
 	default "cfq" if DEFAULT_CFQ
 	default "noop" if DEFAULT_NOOP
+
+config MQ_IOSCHED_CPQ
+	tristate "CPQ I/O scheduler"
+	default y
+	---help---
+	  CPQ (Custom Priority Queue) I/O scheduler for the blk-mq
+	  framework. Adds foreground/background group scheduling on top
+	  of RT/BE/IDLE priority levels with deadline-style dispatch and
+	  priority aging.
 
 config MQ_IOSCHED_DEADLINE
 	tristate "MQ deadline I/O scheduler"
