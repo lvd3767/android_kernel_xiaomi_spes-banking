@@ -176,18 +176,14 @@ void blk_post_runtime_resume(struct request_queue *q, int err)
 	if (!q->dev)
 		return;
 
-	spin_lock_irq(q->queue_lock);
 	if (!err) {
-		q->rpm_status = RPM_ACTIVE;
-		pm_runtime_mark_last_busy(q->dev);
-		pm_request_autosuspend(q->dev);
+		/* fait le vrai travail, y compris blk_clear_pm_only() */
+		blk_set_runtime_active(q);
 	} else {
+		spin_lock_irq(q->queue_lock);
 		q->rpm_status = RPM_SUSPENDED;
+		spin_unlock_irq(q->queue_lock);
 	}
-	spin_unlock_irq(q->queue_lock);
-
-	if (!err)
-		blk_clear_pm_only(q);
 }
 EXPORT_SYMBOL(blk_post_runtime_resume);
 
@@ -207,12 +203,20 @@ EXPORT_SYMBOL(blk_post_runtime_resume);
  */
 void blk_set_runtime_active(struct request_queue *q)
 {
-	if (q->dev) {
-		spin_lock_irq(q->queue_lock);
-		q->rpm_status = RPM_ACTIVE;
-		pm_runtime_mark_last_busy(q->dev);
-		pm_request_autosuspend(q->dev);
-		spin_unlock_irq(q->queue_lock);
-	}
+	int old_status;
+
+	if (!q->dev)
+		return;
+
+	spin_lock_irq(q->queue_lock);
+	old_status = q->rpm_status;
+	q->rpm_status = RPM_ACTIVE;
+	pm_runtime_mark_last_busy(q->dev);
+	pm_request_autosuspend(q->dev);
+	spin_unlock_irq(q->queue_lock);
+
+	/* rend le compteur pm_only pris lors du runtime suspend */
+	if (old_status != RPM_ACTIVE)
+		blk_clear_pm_only(q);
 }
 EXPORT_SYMBOL(blk_set_runtime_active);
