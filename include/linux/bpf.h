@@ -1,4 +1,4 @@
-	RET_PTR_TO_BTF_ID_OR_NULL,      /* returns a pointer to a btf_id or NULL *//* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2011-2014 PLUMgrid, http://plumgrid.com
  */
 #ifndef _LINUX_BPF_H
