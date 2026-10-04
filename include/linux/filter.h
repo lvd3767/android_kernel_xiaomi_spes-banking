@@ -1473,4 +1473,6 @@ static inline bool bpf_sk_lookup_run_v4(struct net *net, int protocol,
 	return no_reuseport;
 }
 
+u64 __bpf_get_netns_cookie(struct sock *sk);
+
 #endif /* __LINUX_FILTER_H__ */
