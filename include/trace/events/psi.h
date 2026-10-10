@@ -22,6 +22,8 @@
 	{ PSI_CPU_SOME, "cpu_some" },	\
 	{ PSI_NONIDLE, "non_idle" })
 
+TRACE_EVENT(psi_window_vmstat,
+
 	TP_PROTO(u64 mem_some, u64 mem_full, const char *zone_name, u64 high,
 		u64 free, u64 cma, u64 file),
 
@@ -53,11 +55,11 @@
 	)
 );
 
-TRACE_EVENT(psi_event,
+TRACE_EVENT(psi_update_trigger_growth,
 
-	TP_PROTO(enum psi_states state, u64 threshold),
+	TP_PROTO(struct psi_trigger *t, u64 now, u64 growth),
 
-	TP_ARGS(state, threshold),
+	TP_ARGS(t, now, growth),
 
 	TP_STRUCT__entry(
 		__field(enum psi_states, state)
@@ -84,6 +86,27 @@ TRACE_EVENT(psi_event,
 			__entry->elapsed,
 			__entry->w_size,
 			__entry->last_event_diff)
+);
+
+TRACE_EVENT(psi_event,
+
+	TP_PROTO(enum psi_states state, u64 threshold),
+
+	TP_ARGS(state, threshold),
+
+	TP_STRUCT__entry(
+		__field(enum psi_states, state)
+		__field(u64, threshold)
+	),
+
+	TP_fast_assign(
+		__entry->state = state;
+		__entry->threshold = threshold;
+	),
+
+	TP_printk("State: %d Threshold: %#llu ns",
+		__entry->state, __entry->threshold
+	)
 );
 
 TRACE_EVENT(psi_update_trigger_wake_up,
