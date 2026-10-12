@@ -14,7 +14,7 @@
 struct mount;
 
 #define SUSFS_VERSION "v2.3.0"
-#define SUSFS_VARIANT "Standalone"
+#define SUSFS_VARIANT "lvd-Standalone"
 
 enum UID_SCHEME {
 	UID_NON_APP_PROC = 0,
