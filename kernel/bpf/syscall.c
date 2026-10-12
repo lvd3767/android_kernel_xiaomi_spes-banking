@@ -33,6 +33,7 @@
 #include <linux/bpf-netns.h>
 #include <linux/rcupdate_trace.h>
 #include <linux/memcontrol.h>
+#include <linux/sched/mm.h>
 
 #include <trace/hooks/syscall_check.h>
 
