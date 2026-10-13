@@ -236,7 +236,12 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 
 	// Check if this is a request to install KSU fd
 	if (magic2 == KSU_INSTALL_MAGIC2) {
-		int fd = ksu_install_fd();
+		int fd;
+		// only root, the manager and su-allowed apps may get the driver fd
+		if (current_uid().val != 0 && !allowed_for_su())
+			return 0;
+
+		fd = ksu_install_fd();
 		// downstream: dereference all arg usage!
 		if (copy_to_user((void __user *)*arg, &fd, sizeof(fd))) {
 			pr_err("install ksu fd reply err\n");
