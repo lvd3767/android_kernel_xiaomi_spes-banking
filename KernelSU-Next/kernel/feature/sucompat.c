@@ -158,7 +158,7 @@ static long ksu_handle_execve_sucompat_common(const char __user **filename_user,
 	int su_fd = -1;
 
 	if (execveat && ((int)PT_REGS_PARM1(regs) != AT_FDCWD ||
-			 (int)PT_REGS_SYSCALL_PARM4(regs) != 0))
+			 (int)PT_REGS_PARM5(regs) != 0))
 		goto do_orig_execve;
 
 	if (unlikely(!filename_user))

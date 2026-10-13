@@ -469,7 +469,16 @@ static void ksu_apply_init_rc_proxy(struct file *file)
 
 void ksu_handle_sys_read(unsigned int fd)
 {
-    struct file *file = fget(fd);
+    struct file *file;
+
+    /*
+     * stop_init_rc_hook() clears ksu_init_rc_hook once init.rc has been
+     * proxied; skip the fget() on every read(2) after that.
+     */
+    if (likely(!ksu_init_rc_hook))
+        return;
+
+    file = fget(fd);
     if (!file) return;
 
     if (is_init_rc(file)) {
