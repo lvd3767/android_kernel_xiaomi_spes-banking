@@ -393,7 +393,6 @@ void __init ksu_syscall_hook_manager_init(void)
 	ksu_setuid_hook_init();
 	ksu_sucompat_init();
 	ksu_avc_spoof_init();
-	ksu_selinux_hide_init();
 }
 
 void __exit ksu_syscall_hook_manager_exit(void)
@@ -431,7 +430,6 @@ void __init ksu_syscall_hook_manager_init(void)
 	ksu_setuid_hook_init();
 	ksu_sucompat_init();
 	ksu_avc_spoof_init();
-	ksu_selinux_hide_init();
 }
 
 void __exit ksu_syscall_hook_manager_exit(void)
