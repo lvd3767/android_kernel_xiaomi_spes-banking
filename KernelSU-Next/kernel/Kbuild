@@ -2,6 +2,7 @@ kernelsu-objs := core/init.o
 
 kernelsu-objs += compat/kernel_compat.o
 kernelsu-objs += feature/kernel_umount.o
+kernelsu-objs += feature/module_blacklist.o
 kernelsu-objs += feature/sulog.o
 kernelsu-objs += feature/sucompat.o
 
@@ -43,6 +44,7 @@ kernelsu-$(CONFIG_KSU_SUSFS) += susfs/susfs.o
 
 kernelsu-objs += feature/adb_root.o
 kernelsu-objs += feature/selinux_hide.o
+kernelsu-objs += feature/shell_su_adb_only.o
 
 ifdef KBUILD_EXTMOD
 ifeq ($(CONFIG_KSU_DISABLE_MANAGER),y)
@@ -112,7 +114,7 @@ ifdef KSU_GIT_VERSION_VALID
 $(eval KSU_VERSION_TAG=$(KSU_GIT_TAG))
 else
 $(warning "KSU_VERSION_TAG not defined! It is better to make KernelSU-Next a git submodule!")
-KSU_VERSION_TAG_FALLBACK := v3.4.1
+KSU_VERSION_TAG_FALLBACK := v3.4.2
 KSU_VERSION_TAG=$(KSU_VERSION_TAG_FALLBACK)
 endif
 

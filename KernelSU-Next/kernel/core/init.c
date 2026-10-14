@@ -26,6 +26,8 @@
 #include "feature/selinux_hide.h"
 #include <linux/err.h>
 #include "feature/adb_root.h"
+#include "feature/module_blacklist.h"
+#include "feature/shell_su_adb_only.h"
 
 extern void __init ksu_lsm_hook_init(void);
 extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
@@ -116,6 +118,8 @@ int __init kernelsu_init(void)
 
 	ksu_sulog_init();
 
+	ksu_shell_su_adb_only_init();
+
 	ksu_supercalls_init();
 
 	
@@ -145,6 +149,8 @@ int __init kernelsu_init(void)
 		ksu_boot_completed = true;
 		track_throne(false);
 
+		ksu_feature_apply_forced();
+
 		if (!getenforce()) {
 			pr_info("Permissive SELinux, enforcing\n");
 			setenforce(true);
@@ -152,7 +158,11 @@ int __init kernelsu_init(void)
 
 	} else {
 		ksu_syscall_hook_manager_init();
-		
+
+		// Block modules early, before vendor modules are loaded in second stage.
+		// (needs ksu_init_symbol_resolver(), done by the syscall hook manager)
+		ksu_module_blacklist_init();
+
 		ksu_lsm_hook_init();
 
 		ksu_adb_root_init();
@@ -200,11 +210,15 @@ void __exit kernelsu_exit(void)
 
 	ksu_allowlist_exit();
 
+	ksu_shell_su_adb_only_exit();
+
 	ksu_sulog_exit();
 
 	ksu_adb_root_exit();
 
 	ksu_feature_exit();
+
+	ksu_module_blacklist_exit();
 
 	if (ksu_cred) {
 		put_cred(ksu_cred);

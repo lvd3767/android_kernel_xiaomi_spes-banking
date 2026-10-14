@@ -37,6 +37,7 @@
 #include "ksu.h"
 #include "ksud.h"
 #include "ksud_boot.h"
+#include "policy/feature.h"
 #include "selinux/selinux.h"
 #include "compat/kernel_compat.h"
 
@@ -183,6 +184,8 @@ static void ksu_initialize_selinux_tw_func(struct callback_head *cb)
 	apply_kernelsu_rules();
 	cache_sid();
 	setup_ksu_cred();
+	// after apply_kernelsu_rules, so that selinux_hide has its sepolicy backup
+	ksu_feature_apply_forced();
 	kfree(cb);
 }
 
