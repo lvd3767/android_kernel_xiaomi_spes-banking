@@ -11,6 +11,7 @@
 #include "manager/manager_observer.h"
 #include "manager/throne_tracker.h"
 #include "selinux/selinux.h"
+#include "feature/selinux_hide.h"
 
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
@@ -34,6 +35,8 @@ void on_post_fs_data(void)
 	stop_input_hook();
 	// retry forced features which failed at second stage
 	ksu_feature_apply_forced();
+	// selinuxfs may not have been mounted yet at second_stage; retry the hooks here
+	ksu_selinux_hide_handle_post_fs_data();
 }
 
 extern void ext4_unregister_sysfs(struct super_block *sb);

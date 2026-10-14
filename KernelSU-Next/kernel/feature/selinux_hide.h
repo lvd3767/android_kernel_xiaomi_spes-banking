@@ -5,5 +5,7 @@
 
 void ksu_selinux_hide_init();
 void ksu_selinux_hide_exit();
+void ksu_selinux_hide_handle_second_stage();
+void ksu_selinux_hide_handle_post_fs_data();
 
 #endif
