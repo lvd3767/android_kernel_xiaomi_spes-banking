@@ -160,7 +160,6 @@ int __init kernelsu_init(void)
 		ksu_syscall_hook_manager_init();
 
 		// Block modules early, before vendor modules are loaded in second stage.
-		// (needs ksu_init_symbol_resolver(), done by the syscall hook manager)
 		ksu_module_blacklist_init();
 
 		ksu_lsm_hook_init();

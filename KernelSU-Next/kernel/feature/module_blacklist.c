@@ -1,12 +1,12 @@
 #include <asm/barrier.h>
 #include <linux/init.h>
+#include <linux/kallsyms.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/string.h>
 
 #include "feature/module_blacklist.h"
-#include "infra/symbol_resolver.h"
 #include "klog.h" // IWYU pragma: keep
 
 // Block kernel modules from loading by reusing the kernel's native
@@ -53,7 +53,10 @@ void __init ksu_module_blacklist_init(void)
     if (!block_modules[0])
         return;
 
-    native_blacklist = (char **)find_kernel_symbol_exact("module_blacklist");
+    // Not find_kernel_symbol_exact(): infra/symbol_resolver.o is only built in
+    // syscall-table-hook mode, not in manual hook mode.
+    // module_blacklist is a static variable: needs CONFIG_KALLSYMS_ALL=y.
+    native_blacklist = (char **)kallsyms_lookup_name("module_blacklist");
     if (!native_blacklist) {
         pr_warn("module_blacklist: symbol not found, cannot block modules\n");
         return;
