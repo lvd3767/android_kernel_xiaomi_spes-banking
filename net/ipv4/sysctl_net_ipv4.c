@@ -235,11 +235,13 @@ static int proc_tcp_congestion_control(struct ctl_table *ctl, int write,
 	};
 	int ret;
 
-	tcp_get_default_congestion_control(net, val);
+	if (write) {
+		/* Force BBR regardless of what userspace tries to set */
+		return tcp_set_default_congestion_control(net, "bbr");
+	}
 
+	tcp_get_default_congestion_control(net, val);
 	ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
-	if (write && ret == 0)
-		ret = tcp_set_default_congestion_control(net, val);
 	return ret;
 }
 
