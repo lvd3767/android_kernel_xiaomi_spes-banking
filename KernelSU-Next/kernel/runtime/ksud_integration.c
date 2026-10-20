@@ -41,6 +41,7 @@
 #include "selinux/selinux.h"
 #include "feature/selinux_hide.h"
 #include "compat/kernel_compat.h"
+#include "preinit/preinit.h"
 
 static const char KERNEL_SU_RC[] =
 	"\n"
@@ -219,6 +220,16 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 		return 0;
 	}
 
+	// preinit: PID 1's very first exec of init is "init selinux_setup",
+	// before second_stage and before the SELinux policy is loaded. Swap
+	// the runner in here, ahead of all the second_stage/zygote detection
+	// below, which only ever sees later execs of init/app_process.
+	if (unlikely(current->pid == 1) &&
+	    ksu_preinit_handle_execve(filename_ptr, argv)) {
+		return 0;
+	}
+	filename = *filename_ptr;
+
 	if (unlikely(!memcmp(filename->name, system_bin_init,
 				sizeof(system_bin_init) - 1) &&
 			argv)) {
@@ -238,6 +249,10 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 					"ksu_initialize_selinux failed to allocate task work\n");
 			}
 			init_second_stage_executed = true;
+			// Safety net: should already be NULL if the preinit hook
+			// above fired on this boot; only matters if it didn't
+			// (preinit disabled, or this is a late-loaded LKM).
+			ksu_preinit_release();
 		}
 	} else if (unlikely(!memcmp(filename->name, old_system_init,
 					sizeof(old_system_init) - 1) &&
@@ -300,6 +315,9 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 				task_work_add(init_task, &on_post_fs_data_cb, TWA_RESUME);
 			rcu_read_unlock();
 			first_zygote = false;
+			// Last chance: the execve hook is about to be stopped below,
+			// so drop any still-staged runner now rather than leak it.
+			ksu_preinit_release();
 			stop_execve_hook();
 		}
 	}

@@ -1,3 +1,4 @@
+#include <linux/errno.h>
 #include <linux/kallsyms.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -191,4 +192,24 @@ void __init ksu_init_symbol_resolver()
         pr_warn("kallsyms_on_each_match_symbol not found!\n");
     }
 #endif
+}
+
+int ksu_lookup_kernel_symbols(const char *const *names, unsigned long *addrs, unsigned int count)
+{
+    unsigned int i;
+    int found = 0;
+
+    if (!names || !addrs)
+        return -EINVAL;
+
+    for (i = 0; i < count; i++) {
+        addrs[i] = 0;
+        if (!names[i] || !*names[i])
+            continue;
+        addrs[i] = find_kernel_symbol_exact(names[i]);
+        if (addrs[i])
+            found++;
+    }
+
+    return found;
 }
