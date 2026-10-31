@@ -195,6 +195,7 @@ struct fts_ts_data {
 	bool pm_suspend;
 #endif
 	bool suspended;
+	bool need_recovery; /* IC stopped answering on suspend: hard reset on resume */
 	bool fw_loading;
 	bool irq_disabled;
 	bool power_disabled;

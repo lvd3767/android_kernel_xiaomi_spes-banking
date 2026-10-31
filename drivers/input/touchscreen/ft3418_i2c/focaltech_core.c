@@ -1962,6 +1962,47 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 	return 0;
 }
 
+/*
+ * fts_ic_hard_recover - bring back an IC that stopped answering on I2C.
+ *
+ * Tries a plain hardware reset first (3 times). If the IC is still silent
+ * it power-cycles the touch supplies and resets once more.
+ */
+static int fts_ic_hard_recover(struct fts_ts_data *ts_data)
+{
+	int i;
+
+	FTS_ERROR("IC not responding, starting hard recovery");
+
+#if FTS_POWER_SOURCE_CUST_EN
+	if (ts_data->power_disabled)
+		fts_power_source_resume(ts_data);
+#endif
+
+	for (i = 0; i < 3; i++) {
+		fts_reset_proc(200);
+		if (!fts_wait_tp_to_valid(true)) {
+			FTS_INFO("IC recovered by reset (try %d)", i + 1);
+			return 0;
+		}
+	}
+
+	FTS_ERROR("reset did not help, power cycling touch supplies");
+#if FTS_POWER_SOURCE_CUST_EN
+	fts_power_source_suspend(ts_data);
+	msleep(50);
+	fts_power_source_resume(ts_data);
+#endif
+	fts_reset_proc(200);
+	if (!fts_wait_tp_to_valid(true)) {
+		FTS_INFO("IC recovered by power cycle");
+		return 0;
+	}
+
+	FTS_ERROR("IC still not responding after hard recovery");
+	return -EIO;
+}
+
 static int fts_ts_suspend(struct device *dev)
 {
 	struct fts_ts_data *ts_data = dev_get_drvdata(dev);
@@ -2004,8 +2045,18 @@ static int fts_ts_suspend(struct device *dev)
 
 		ret = fts_gesture_suspend(ts_data);
 		if (ret < 0) {
-			FTS_ERROR("gesture suspend failed: %d; aborting ts suspend", ret);
-			fts_irq_enable();
+			/*
+			 * IC is not answering on I2C (NACK, usually because the
+			 * panel already cut its power/reset). Previously we bailed
+			 * out here and stayed in the "awake" state, so resume never
+			 * reset the IC and touch stayed dead. Mark it suspended and
+			 * ask resume for a hard reset instead.
+			 */
+			FTS_ERROR("gesture suspend failed: %d; hard reset on resume", ret);
+			mutex_lock(&ts_data->bus_lock);
+			ts_data->need_recovery = true;
+			WRITE_ONCE(ts_data->suspended, true);
+			mutex_unlock(&ts_data->bus_lock);
 			return 0;
 		}
 
@@ -2061,6 +2112,15 @@ static int fts_ts_resume(struct device *dev)
 #endif
 		fts_reset_proc(200);
 	}
+
+	/*
+	 * Incell path above never resets the IC and relies on the LCD reset
+	 * sequence to do it. A replacement panel may not do that, so verify
+	 * the IC is alive and hard-reset it if it is not.
+	 */
+	if (ts_data->need_recovery || fts_wait_tp_to_valid(true) < 0)
+		fts_ic_hard_recover(ts_data);
+	ts_data->need_recovery = false;
 
 	fts_tp_state_recovery(ts_data);
 
