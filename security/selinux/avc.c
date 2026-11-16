@@ -47,7 +47,6 @@
 #ifdef CONFIG_KSU_SUSFS
 #include <linux/jump_label.h>
 extern u32 susfs_ksu_sid;
-extern u32 susfs_priv_app_sid;
 /*
  * susfs 2.2.0: this used to be a plain bool DEFINED in this file. It is
  * now a jump-label static key DEFINED in drivers/kernelsu/susfs/susfs.c
@@ -199,26 +198,22 @@ static void avc_dump_query(struct audit_buffer *ab, struct selinux_state *state,
 		kfree(scontext);
 	}
 
-	rc = security_sid_to_context(state, tsid, &scontext, &scontext_len);
 #ifdef CONFIG_KSU_SUSFS
-	if (unlikely(tsid == susfs_ksu_sid && static_branch_unlikely(&susfs_is_avc_log_spoofing_enabled))) {
-		if (rc)
-			audit_log_format(ab, " tsid=%d", susfs_priv_app_sid);
-		else
-			audit_log_format(ab, " tcontext=%s", "u:r:priv_app:s0:c512,c768");
-		goto bypass_orig_flow;
+	if (static_branch_unlikely(&susfs_is_avc_log_spoofing_enabled) &&
+	    unlikely(tsid && tsid == READ_ONCE(susfs_ksu_sid))) {
+		audit_log_format(ab, " tcontext=u:r:priv_app:s0:c512,c768");
+		goto out_tclass;
 	}
 #endif
-
+	rc = security_sid_to_context(state, tsid, &scontext, &scontext_len);
 	if (rc)
 		audit_log_format(ab, " tsid=%d", tsid);
 	else {
 		audit_log_format(ab, " tcontext=%s", scontext);
 		kfree(scontext);
 	}
-
 #ifdef CONFIG_KSU_SUSFS
-bypass_orig_flow:
+out_tclass:
 #endif
 	BUG_ON(!tclass || tclass >= ARRAY_SIZE(secclass_map));
 	audit_log_format(ab, " tclass=%s", secclass_map[tclass-1].name);
