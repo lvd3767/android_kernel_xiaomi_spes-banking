@@ -36,12 +36,7 @@ extern int susfs_raw_statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf
 extern bool susfs_is_current_ksu_domain(void);
 extern void setup_selinux(const char *domain, struct cred *cred);
 extern struct cred *ksu_cred;
-extern void susfs_set_ksu_sid(void);
-extern void susfs_set_zygote_sid(void);
-extern void susfs_set_init_sid(void);
-extern void susfs_set_priv_app_sid(void);
-
-void susfs_setup_sids(void);
+extern void susfs_setup_sids(void);
 
 #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
 DEFINE_STATIC_KEY_TRUE(susfs_is_log_enabled);
@@ -1461,14 +1456,6 @@ static void susfs_run_extra_works(struct work_struct *work)
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 	susfs_run_sus_path_loop();
 #endif
-}
-
-void susfs_setup_sids(void)
-{
-	susfs_set_ksu_sid();
-	susfs_set_zygote_sid();
-	susfs_set_init_sid();
-	susfs_set_priv_app_sid();
 }
 
 /* ----------------------------------------------------------------- */

@@ -279,10 +279,7 @@ out_flush:
 	reset_avc_cache();
 #endif
 #ifdef CONFIG_KSU_SUSFS
-    susfs_set_priv_app_sid();
-    susfs_set_init_sid();
-    susfs_set_ksu_sid();
-    susfs_set_zygote_sid();
+    susfs_setup_sids();
 #endif
 }
 

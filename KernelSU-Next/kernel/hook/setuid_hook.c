@@ -45,7 +45,6 @@ static inline bool is_zygote_normal_app_uid(uid_t uid)
 }
 
 #ifdef CONFIG_KSU_SUSFS
-extern u32 susfs_zygote_sid;
 extern struct cred *ksu_cred;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
@@ -105,7 +104,7 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 
     // We only interest in process spwaned by zygote
 #ifdef CONFIG_KSU_SUSFS
-    if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid)) {
+    if (!susfs_is_current_zygote_domain()) {
         return 0;
     }
 #endif

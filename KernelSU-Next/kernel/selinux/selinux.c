@@ -282,12 +282,10 @@ void escape_to_root_for_adb_root(void)
 #ifdef CONFIG_KSU_SUSFS
 #define KERNEL_INIT_DOMAIN "u:r:init:s0"
 #define KERNEL_ZYGOTE_DOMAIN "u:r:zygote:s0"
-#define KERNEL_PRIV_APP_DOMAIN "u:r:priv_app:s0:c512,c768"
 
 u32 susfs_ksu_sid = 0;
 u32 susfs_init_sid = 0;
 u32 susfs_zygote_sid = 0;
-u32 susfs_priv_app_sid = 0;
 
 /*
  * Return 0 before SELinux policy loads: security_secctx_to_secid() succeeds
@@ -340,13 +338,9 @@ bool susfs_is_sid_equal(const struct cred *cred, u32 sid2)
     return tsec && tsec->sid == sid2;
 }
 
-u32 susfs_get_current_sid(void) {
-    return current_sid();
-}
-
-void susfs_set_zygote_sid(void)
+u32 susfs_get_current_sid(void)
 {
-    susfs_set_sid(KERNEL_ZYGOTE_DOMAIN, &susfs_zygote_sid);
+    return current_sid();
 }
 
 bool susfs_is_current_zygote_domain(void)
@@ -355,20 +349,10 @@ bool susfs_is_current_zygote_domain(void)
     return unlikely(sid && current_sid() == sid);
 }
 
-void susfs_set_ksu_sid(void)
-{
-    susfs_set_sid(KERNEL_SU_CONTEXT, &susfs_ksu_sid);
-}
-
 bool susfs_is_current_ksu_domain(void)
 {
     u32 sid = READ_ONCE(susfs_ksu_sid);
     return unlikely(sid && current_sid() == sid);
-}
-
-void susfs_set_init_sid(void)
-{
-    susfs_set_sid(KERNEL_INIT_DOMAIN, &susfs_init_sid);
 }
 
 bool susfs_is_current_init_domain(void)
@@ -377,9 +361,11 @@ bool susfs_is_current_init_domain(void)
     return unlikely(sid && current_sid() == sid);
 }
 
-void susfs_set_priv_app_sid(void)
+void susfs_setup_sids(void)
 {
-    susfs_set_sid(KERNEL_PRIV_APP_DOMAIN, &susfs_priv_app_sid);
+    susfs_set_sid(KERNEL_SU_CONTEXT, &susfs_ksu_sid);
+    susfs_set_sid(KERNEL_ZYGOTE_DOMAIN, &susfs_zygote_sid);
+    susfs_set_sid(KERNEL_INIT_DOMAIN, &susfs_init_sid);
 }
 #endif // #ifdef CONFIG_KSU_SUSFS
 
