@@ -10,6 +10,7 @@
 
 #ifndef KSU_COMPAT_USE_SELINUX_STATE
 #include "avc.h"
+#include "avc_ss.h"
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)

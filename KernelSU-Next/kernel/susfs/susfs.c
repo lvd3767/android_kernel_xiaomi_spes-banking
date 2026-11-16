@@ -1509,7 +1509,9 @@ void __init susfs_init(void)
 	INIT_WORK(&susfs_extra_works, susfs_run_extra_works);
 	susfs_register_uname_hook();
 	susfs_register_cmdline_hook();
-	/* Best-effort SID initialization; may fail until SELinux policy is loaded */
-	susfs_setup_sids();
+	/*
+	 * SIDs are populated after SELinux policy load (apply_kernelsu_rules /
+	 * susfs_sdcard_monitor_fn); querying before policy load yields SECINITSID_KERNEL.
+	 */
 	SUSFS_LOGI("susfs initialized! version: " SUSFS_VERSION "\n");
 }
