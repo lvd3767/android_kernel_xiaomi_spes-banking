@@ -213,13 +213,11 @@ rmnet_map_ipv4_ul_csumv3_header(void *iphdr,
 				struct rmnet_map_ul_csum_header *ul_header,
 				struct sk_buff *skb)
 {
-	struct iphdr *ip4h = (struct iphdr *)iphdr;
-	__be16 *net_hdr = (__be16 *)ul_header, offset;
-	u16 *host_hdr = (u16 *)ul_header;
 
-	offset = htons((u16)(skb_transport_header(skb) -
-				     (unsigned char *)iphdr));
-	ul_header->csum_start_offset = offset;
+	struct iphdr *ip4h = (struct iphdr *)iphdr;
+	__be16 *net_hdr = (__be16 *)ul_header;
+	u16 *host_hdr = (u16 *)ul_header;
+	ul_header->csum_start_offset = htons(skb_network_header_len(skb));
 	ul_header->csum_insert_offset = skb->csum_offset;
 	ul_header->csum_enabled = 1;
 	if (ip4h->protocol == IPPROTO_UDP)
@@ -417,6 +415,7 @@ struct sk_buff *rmnet_map_deaggregate(struct sk_buff *skb,
 		skb_frag_t *frag0 = skb_shinfo(skb)->frags;
 		struct page *page = skb_frag_page(frag0);
 
+
 		skbn = alloc_skb(RMNET_MAP_DEAGGR_HEADROOM, GFP_ATOMIC);
 		if (!skbn)
 			return NULL;
@@ -436,6 +435,7 @@ struct sk_buff *rmnet_map_deaggregate(struct sk_buff *skb,
 		memcpy(skbn->data, data, packet_len);
 	}
 
+	skbn->dev = skb->dev;
 	pskb_pull(skb, packet_len);
 
 	return skbn;

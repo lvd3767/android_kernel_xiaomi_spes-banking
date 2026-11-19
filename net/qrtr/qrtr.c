@@ -841,7 +841,6 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 
 	if (cb->dst_port == QRTR_PORT_CTRL_LEGACY)
 		cb->dst_port = QRTR_PORT_CTRL;
-
 	if (!size || size > len || len != ALIGN(size, 4) + hdrlen)
 		goto err;
 
@@ -1951,7 +1950,9 @@ static int qrtr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	case SIOCGSTAMP:
+		release_sock(sk);
 		rc = sock_get_timestamp(sk, argp);
+		lock_sock(sk);
 		break;
 	case SIOCADDRT:
 	case SIOCDELRT:

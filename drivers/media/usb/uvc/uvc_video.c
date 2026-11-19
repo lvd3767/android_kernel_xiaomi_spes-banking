@@ -1156,18 +1156,18 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 
 		buf->buf.field = V4L2_FIELD_NONE;
 		buf->buf.sequence = stream->sequence;
-		buf->buf.vb2_buf.timestamp = ktime_to_ns(uvc_video_get_time());
-		/*  BEGIN IKSWR-62149  Lenovo chengyk3, 2021/03/25 Match the frame
-		 *  timestamp and 6dof timestamp.If device if ThinkReality A3,overwirte
+		buf->buf.vb2_buf.timestamp = ktime_to_ns(uvc_video_get_timestamp(stream));
+
+		/*  BEGIN IKSWR-62149  Lenovo chengyk3, 2021/03/25 Match the
+		 *  timestamp and 6dof timestamp. If device is ThinkReality,
 		 *  the current time as the device-side pts
 		 */
 		if (stream->stats.frame.pts != 0 &&
-				(stream->dev->quirks & UVC_QUIRK_OVERRIDE_TIMESTAMPS)) {
+				(stream->dev->quirks & UVC_QUIRK_OVERRIDE_PTS)) {
 			buf->buf.vb2_buf.glass_timestamp =
 				stream->stats.frame.pts;
 		}
 		//  END IKSWR-62149
-
 		buf->state = UVC_BUF_STATE_ACTIVE;
 		if (meta_buf)
 			meta_buf->state = UVC_BUF_STATE_ACTIVE;
