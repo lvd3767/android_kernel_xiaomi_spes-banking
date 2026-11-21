@@ -127,12 +127,26 @@ int vfs_statfs(const struct path *path, struct kstatfs *buf)
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
 	mnt = real_mount(path->mnt);
-	if (likely(susfs_is_current_proc_umounted())) {
+	if (likely(susfs_is_current_proc_umounted()) &&
+	    mnt->mnt_id >= DEFAULT_KSU_MNT_ID) {
+		/* Only the root of a KSU/module mount itself is replaced by its
+		 * first real parent (that is what a mount detector would stat).
+		 * A file inside such a mount keeps its own statfs: answering
+		 * with another filesystem's values for a path that is really
+		 * served by this one is an inconsistency that integrity checks
+		 * (PairIP) notice, and it crashed DevCheck. */
+		if (path->dentry != path->mnt->mnt_root)
+			goto orig_flow;
 		for (; mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent) {}
+		error = statfs_by_dentry(mnt->mnt.mnt_root, buf);
+		if (!error)
+			buf->f_flags = calculate_f_flags(&mnt->mnt);
+		return error;
 	}
-	error = statfs_by_dentry(mnt->mnt.mnt_root, buf);
+orig_flow:
+	error = statfs_by_dentry(path->dentry, buf);
 	if (!error)
-		buf->f_flags = calculate_f_flags(&mnt->mnt);
+		buf->f_flags = calculate_f_flags(path->mnt);
 	return error;
 #else
 	error = statfs_by_dentry(path->dentry, buf);

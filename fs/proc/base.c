@@ -98,7 +98,7 @@
 #include <trace/events/oom.h>
 #include "internal.h"
 #include "fd.h"
-#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#ifdef CONFIG_KSU_SUSFS
 #include <linux/susfs_def.h>
 #endif
 
@@ -848,15 +848,27 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	while (count > 0) {
 		size_t this_len = min_t(size_t, count, PAGE_SIZE);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
-		vma = find_vma(mm, addr);
-		if (vma && vma->vm_file) {
-			struct inode *inode = file_inode(vma->vm_file);
-			if (unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)) && susfs_is_current_proc_umounted()) {
-				if (write) {
-					copied = -EFAULT;
-				} else {
-					copied = -EIO;
-				}
+		if (susfs_is_current_proc_umounted()) {
+			bool sus_hit = false;
+
+			/* find_vma() needs mmap_sem; vm_file may be gone after unlock,
+			 * so only test the inode flag while still holding the lock. */
+			if (mmap_read_lock_killable(mm)) {
+				if (!copied)
+					copied = -EINTR;
+				break;
+			}
+			vma = find_vma(mm, addr);
+			if (vma && vma->vm_file) {
+				struct inode *inode = file_inode(vma->vm_file);
+				if (unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)))
+					sus_hit = true;
+			}
+			mmap_read_unlock(mm);
+			if (sus_hit) {
+				/* keep what was already copied, only report error if nothing was */
+				if (!copied)
+					copied = write ? -EFAULT : -EIO;
 				break;
 			}
 		}
@@ -2250,7 +2262,14 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 	 */
 
 	for (vma = mm->mmap, pos = 2; vma; vma = vma->vm_next) {
-		if (vma->vm_file && ++pos > ctx->pos)
+		if (!vma->vm_file)
+			continue;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		inode = file_inode(vma->vm_file);
+		if (inode->i_mapping && unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state) && susfs_is_current_proc_umounted_app()))
+			continue;
+#endif
+		if (++pos > ctx->pos)
 			nr_files++;
 	}
 

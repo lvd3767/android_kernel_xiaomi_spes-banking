@@ -259,6 +259,11 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 	}
 	if (susfs_is_inode_sus_path(inode)) {
 		iput(inode);
+		/* entry is silently dropped: it must not leave the
+		 * "only used if we fail" -EINVAL behind, otherwise a directory
+		 * whose remaining entries are all hidden returns -EINVAL
+		 * instead of 0 (end of directory). */
+		buf->error = 0;
 		return 0;
 	}
 	iput(inode);
@@ -371,6 +376,11 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 	}
 	if (susfs_is_inode_sus_path(inode)) {
 		iput(inode);
+		/* entry is silently dropped: it must not leave the
+		 * "only used if we fail" -EINVAL behind, otherwise a directory
+		 * whose remaining entries are all hidden returns -EINVAL
+		 * instead of 0 (end of directory). */
+		buf->error = 0;
 		return 0;
 	}
 	iput(inode);
@@ -583,6 +593,11 @@ static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 	}
 	if (susfs_is_inode_sus_path(inode)) {
 		iput(inode);
+		/* entry is silently dropped: it must not leave the
+		 * "only used if we fail" -EINVAL behind, otherwise a directory
+		 * whose remaining entries are all hidden returns -EINVAL
+		 * instead of 0 (end of directory). */
+		buf->error = 0;
 		return 0;
 	}
 	iput(inode);

@@ -82,18 +82,18 @@ static inline bool susfs_is_current_proc_umounted_app(void)
 }
 
 #define SUSFS_IS_INODE_SUS_MAP(inode) \
-	inode && inode->i_mapping && \
-	unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state)) && \
-	susfs_is_current_proc_umounted_app()
+	((inode) && (inode)->i_mapping && \
+	unlikely(test_bit(AS_FLAGS_SUS_MAP, &(inode)->i_state)) && \
+	susfs_is_current_proc_umounted_app())
 
 #define SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(inode) \
-	inode && inode->i_mapping && \
-	unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_state))
+	((inode) && (inode)->i_mapping && \
+	unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &(inode)->i_state)))
 
 #define SUSFS_IS_INODE_OPEN_REDIRECT(inode) \
-	inode && inode->i_mapping && \
-	unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_state)) && \
-	susfs_is_current_proc_umounted_app()
+	((inode) && (inode)->i_mapping && \
+	unlikely(test_bit(AS_FLAGS_OPEN_REDIRECT, &(inode)->i_state)) && \
+	susfs_is_current_proc_umounted_app())
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 #define SUSFS_DECL_FSNOTIFY_OPS(name) \

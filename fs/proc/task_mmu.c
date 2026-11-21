@@ -1915,7 +1915,7 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		ret = walk_page_range(mm, start_vaddr, end, &pagemap_ops, &pm);
 #ifdef CONFIG_KSU_SUSFS_SUS_MAP
 		vma = find_vma(mm, start_vaddr);
-		if (vma->vm_file) {
+		if (vma && vma->vm_file) {
 			struct inode *inode = file_inode(vma->vm_file);
 			if (unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_state) &&
 				susfs_is_current_proc_umounted_app()))
