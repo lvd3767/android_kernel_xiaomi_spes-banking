@@ -117,6 +117,9 @@ struct fq_sched_data {
 /* special value to mark a detached flow (not on old/new list) */
 static struct fq_flow detached, throttled;
 
+/* Largest departure time accepted in the future (same as upstream fq horizon) */
+#define FQ_MAX_HORIZON_NS	(10ULL * NSEC_PER_SEC)
+
 static void fq_flow_set_detached(struct fq_flow *f)
 {
 	f->next = &detached;
@@ -493,8 +496,20 @@ begin:
 
 	skb = f->head;
 	if (skb && !skb_is_tcp_pure_ack(skb)) {
-		u64 time_next_packet = max_t(u64, ktime_to_ns(skb->tstamp),
-					     f->time_next_packet);
+		u64 time_next_packet;
+		u64 ts = ktime_to_ns(skb->tstamp);
+
+		/* skb->tstamp is only a valid EDT if it is on the monotonic
+		 * clock and close to now. A wall clock value (written by some
+		 * netfilter/driver code) or any date beyond FQ_MAX_HORIZON_NS
+		 * would otherwise park the flow for a very long time and make
+		 * it drop everything once flow_plimit is reached. Ignore it.
+		 */
+		if (unlikely(ts > now + FQ_MAX_HORIZON_NS)) {
+			skb->tstamp = 0;
+			ts = 0;
+		}
+		time_next_packet = max_t(u64, ts, f->time_next_packet);
 
 		if (now < time_next_packet) {
 			head->first = f->next;

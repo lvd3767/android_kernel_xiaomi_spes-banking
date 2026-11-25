@@ -107,8 +107,9 @@ static void quota2_log(unsigned int hooknum,
 	}
 	pm = nlmsg_data(nlh);
 	memset(pm, 0, sizeof(*pm));
-	if (skb->tstamp == 0)
-		__net_timestamp((struct sk_buff *)skb);
+	/* Do not touch skb->tstamp here: since EDT, sch_fq reads it as a
+	 * departure time on the monotonic clock. Writing the wall clock into
+	 * an outgoing packet makes fq hold it (and its whole flow) for years. */
 	pm->hook = hooknum;
 	if (prefix != NULL)
 		strlcpy(pm->prefix, prefix, sizeof(pm->prefix));

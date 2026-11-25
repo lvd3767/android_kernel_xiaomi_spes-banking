@@ -984,10 +984,10 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	/* set conntrack timestamp, if enabled. */
 	tstamp = nf_conn_tstamp_find(ct);
 	if (tstamp) {
-		if (skb->tstamp == 0)
-			__net_timestamp(skb);
-
-		tstamp->start = ktime_to_ns(skb->tstamp);
+		/* do not write the wall clock into skb->tstamp: sch_fq would
+		 * treat it as a (far future) departure time */
+		tstamp->start = ktime_to_ns(skb->tstamp ? skb->tstamp :
+					    ktime_get_real());
 	}
 	/* Since the lookup is lockless, hash insertion must be done after
 	 * starting the timer and setting the CONFIRMED bit. The RCU barriers

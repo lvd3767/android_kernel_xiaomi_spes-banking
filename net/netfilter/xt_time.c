@@ -171,10 +171,9 @@ time_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	 * may happen that the same packet matches both rules if
 	 * it arrived at the right moment before 13:00.
 	 */
-	if (skb->tstamp == 0)
-		__net_timestamp((struct sk_buff *)skb);
-
-	stamp = ktime_to_ns(skb->tstamp);
+	/* Never store the wall clock into skb->tstamp of a packet that may be
+	 * queued by sch_fq (it is read there as a monotonic departure time). */
+	stamp = ktime_to_ns(skb->tstamp ? skb->tstamp : ktime_get_real());
 	stamp = div_s64(stamp, NSEC_PER_SEC);
 
 	if (info->flags & XT_TIME_LOCAL_TZ)
