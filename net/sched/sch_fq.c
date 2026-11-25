@@ -817,7 +817,7 @@ static int fq_init(struct Qdisc *sch, struct nlattr *opt,
 	int err;
 
 	sch->limit		= 10000;
-	q->flow_plimit		= 100;
+	q->flow_plimit		= 1000;	/* was 100: tail-drops UDP bursts (video calls) */
 	q->quantum		= 2 * psched_mtu(qdisc_dev(sch));
 	q->initial_quantum	= 10 * psched_mtu(qdisc_dev(sch));
 	q->flow_refill_delay	= msecs_to_jiffies(40);
